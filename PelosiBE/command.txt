@@ -1,0 +1,1 @@
+python3 -m uvicorn pelosi:app --reload --port 3000
