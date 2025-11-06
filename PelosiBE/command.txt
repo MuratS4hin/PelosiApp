@@ -1,1 +1,2 @@
-python3 -m uvicorn pelosi:app --reload --port 3000
+source venv/bin/activate
+python3 -m uvicorn main:app --reload --host 0.0.0.0; 

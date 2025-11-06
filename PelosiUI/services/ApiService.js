@@ -1,4 +1,4 @@
-const BASE_URL = 'http://192.168.1.5:8000'; // Change this accordingly
+const BASE_URL = 'http://192.168.0.11:8000'; // Change this accordingly
 
 export default class ApiService {
   static token = null; // Optional: token for auth

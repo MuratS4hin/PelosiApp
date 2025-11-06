@@ -1,0 +1,6 @@
+PelosiUI/node_modules
+PelosiBE/venv
+.DS_Store
+PelosiBE/db/congresstrades_grouped.json
+PelosiUI/.expo/README.md
+PelosiUI/.expo/devices.json
