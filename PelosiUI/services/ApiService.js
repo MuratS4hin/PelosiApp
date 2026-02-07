@@ -1,4 +1,4 @@
-const BASE_URL = 'http://192.168.0.11:8000'; // Change this accordingly
+const BASE_URL = 'http://192.168.31.13:8000'; // Change this accordingly
 
 export default class ApiService {
   static token = null; // Optional: token for auth
@@ -48,7 +48,7 @@ export default class ApiService {
   static get(endpoint) {
     return this.request(endpoint, 'GET');
   }
-
+ 
   static post(endpoint, body) {
     return this.request(endpoint, 'POST', body);
   }

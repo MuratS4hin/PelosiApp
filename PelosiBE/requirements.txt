@@ -1,0 +1,8 @@
+fastapi
+uvicorn
+playwright
+pandas
+beautifulsoup4
+requests
+apscheduler
+yfinance

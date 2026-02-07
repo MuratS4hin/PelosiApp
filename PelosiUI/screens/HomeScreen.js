@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import {
   View,
   Text,
@@ -7,47 +7,39 @@ import {
   StyleSheet,
   TouchableOpacity,
   Modal,
+  ScrollView,
 } from 'react-native';
-import { useNavigation } from '@react-navigation/native';
+import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import ApiService from '../services/ApiService';
 
-const HomeScreen = () => {
-  const [groupedData, setGroupedData] = useState({});
-  const [dates, setDates] = useState([]);
-  const [selectedDate, setSelectedDate] = useState(null);
+const HomeScreen = ({ navigation }) => {
+  const [rawData, setRawData] = useState([]); 
+  const [congressmenList, setCongressmenList] = useState([]);
+  const [selectedCongressman, setSelectedCongressman] = useState('All');
+  const [expandedTicker, setExpandedTicker] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [showDropdown, setShowDropdown] = useState(false);
-  const navigation = useNavigation();
   const [isRefreshing, setIsRefreshing] = useState(false);
-
-  function parseCongressDate(d) {
-    // Example input: "Jul. 27, 2025"
-    const [monthStr, day, year] = d.replace(',', '').split(' ');
-    const monthMap = {
-      Jan: 0, Feb: 1, Mar: 2, Apr: 3, May: 4, Jun: 5,
-      Jul: 6, Aug: 7, Sep: 8, Oct: 9, Nov: 10, Dec: 11,
-    };
-    return new Date(year, monthMap[monthStr.replace('.', '')], day);
-  }
+  const [showFilterModal, setShowFilterModal] = useState(false);
 
   const fetchData = async (isRefresh = false) => {
     if (isRefresh) setIsRefreshing(true);
     else setLoading(true);
 
     try {
-      const data = await ApiService.get('congresstrades/grouped');
-      const dateKeys = Object.keys(data).sort((a, b) =>
-        parseCongressDate(b) - parseCongressDate(a)
-      );
-
-      setGroupedData(data);
-      setDates(dateKeys);
-      setSelectedDate((prev) => prev || dateKeys[0]);
-    } catch (error) {
-      console.error('Error fetching congress trades:', error);
+      const data = await ApiService.get('congresstrades/load_existing_data');
+      const congressmen = await ApiService.get('congresstrades/congresspeople');
+      
+      // Extract names from [[id, name], ...] format
+      const names = congressmen.map(item => item[1]);
+      const sortedNames = ['All', ...names.sort((a, b) => a.localeCompare(b))];
+      
+      setRawData(data);
+      setCongressmenList(sortedNames);
+    } catch (err) {
+      console.error('Fetch error:', err);
     } finally {
-      if (isRefresh) setIsRefreshing(false);
-      else setLoading(false);
+      setLoading(false);
+      setIsRefreshing(false);
     }
   };
 
@@ -55,48 +47,92 @@ const HomeScreen = () => {
     fetchData();
   }, []);
 
-  const renderItem = ({ item }) => {
-    const typeText = item[1].split('\n')[0].toLowerCase();
-    const isSale = typeText.includes("sale");
-    const isPurchase = typeText.includes("purchase");
+  // Grouped Stocks (Sorted by Ticker A-Z)
+  const groupedStocks = useMemo(() => {
+    const filtered = selectedCongressman === 'All' 
+      ? rawData 
+      : rawData.filter(item => item[1] === selectedCongressman);
 
-    const cardBackground = isSale
-      ? "#FFCCCC"
-      : isPurchase
-        ? "#CCFFCC"
-        : "#FFFFFF";
+    const groups = filtered.reduce((acc, item) => {
+      const ticker = item[0];
+      if (!acc[ticker]) {
+        acc[ticker] = { ticker, transactions: [] };
+      }
+      acc[ticker].transactions.push({
+        name: item[1],
+        date: item[2],
+        type: item[3],
+      });
+      return acc;
+    }, {});
+
+    // --- SORTING LOGIC ---
+    // Convert to array and sort by Ticker (A-Z)
+    const sortedArray = Object.values(groups).sort((a, b) => 
+      a.ticker.localeCompare(b.ticker)
+    );
+
+    // Sort transactions inside each ticker by date (Descending / Newest First)
+    sortedArray.forEach(stock => {
+      stock.transactions.sort((a, b) => new Date(b.date) - new Date(a.date));
+    });
+
+    return sortedArray;
+  }, [rawData, selectedCongressman]);
+
+  const renderItem = ({ item }) => {
+    const isExpanded = expandedTicker === item.ticker;
 
     return (
-      <TouchableOpacity
-        style={[styles.card, { backgroundColor: cardBackground }]}
-        onPress={() => {
-          const endDate = new Date();
-          const startDate = new Date();
-          startDate.setDate(endDate.getDate() - 30);
+      <View style={styles.card}>
+        <View style={styles.cardContent}>
+          <TouchableOpacity 
+            style={styles.cardTouchable}
+            onPress={() => navigation.navigate('StockDetail', { ticker: item.ticker })}
+            activeOpacity={0.7}
+          >
+            <View style={styles.cardHeader}>
+              <Text style={styles.ticker}>{item.ticker}</Text>
+              <Text style={styles.tradeCount}>
+                {item.transactions.length} trade{item.transactions.length > 1 ? 's' : ''}
+              </Text>
+            </View>
+          </TouchableOpacity>
 
-          navigation.navigate('StockDetail', {
-            ticker: item[0].split('\n')[0].trim(),
-            startDate: startDate.toISOString().split('T')[0],
-            endDate: endDate.toISOString().split('T')[0],
-          });
-        }}
-      >
-        <Text style={styles.ticker}>{item[0].split('\n')[1]}</Text>
-
-        <View style={styles.detailsRow}>
-          <Text style={styles.detailsLeft}>
-            {item[1].split('\n')[0]} {item[1].split('\n')[1]}
-          </Text>
-          <Text style={styles.detailsRight}>{item[3]}</Text>
+          <TouchableOpacity 
+            style={styles.arrowButton}
+            onPress={() => setExpandedTicker(isExpanded ? null : item.ticker)}
+            activeOpacity={0.6}
+          >
+            <Icon 
+              name={isExpanded ? "chevron-up" : "chevron-down"} 
+              size={24} 
+              color="#007AFF" 
+            />
+          </TouchableOpacity>
         </View>
 
-        <Text style={styles.details}>{item[2].split('\n')[0]}</Text>
-        <Text style={styles.note}>{item[5]}</Text>
-        <Text style={styles.percent}>{item[6]}</Text>
-      </TouchableOpacity>
+        {isExpanded && (
+          <View style={styles.dropdownContent}>
+            {item.transactions.map((tx, index) => (
+              <View key={`${item.ticker}-${tx.name}-${index}`} style={styles.txRow}>
+                <View style={styles.txInfo}>
+                  <Text style={styles.txName}>{tx.name}</Text>
+                  <Text style={styles.txDate}>{tx.date}</Text>
+                </View>
+                <Text style={[
+                  styles.txBadge, 
+                  tx.type.toLowerCase().includes('purchase') ? styles.buyBadge : styles.sellBadge
+                ]}>
+                  {tx.type.toUpperCase()}
+                </Text>
+              </View>
+            ))}
+          </View>
+        )}
+      </View>
     );
   };
-
 
   if (loading) {
     return (
@@ -108,56 +144,75 @@ const HomeScreen = () => {
 
   return (
     <View style={styles.container}>
-      {/* Custom dropdown */}
-      <TouchableOpacity
-        style={styles.dropdownButton}
-        onPress={() => setShowDropdown(true)}
-      >
-        <Text style={styles.dropdownButtonText}>
-          {selectedDate || 'Select a date'}
-        </Text>
-      </TouchableOpacity>
-
-      {/* Modal dropdown */}
-      <Modal
-        transparent
-        visible={showDropdown}
-        animationType="fade"
-        onRequestClose={() => setShowDropdown(false)}
-      >
-        <TouchableOpacity
-          style={styles.modalOverlay}
-          activeOpacity={1}
-          onPressOut={() => setShowDropdown(false)}
+      <View style={styles.filterBar}>
+        <TouchableOpacity 
+          style={styles.filterButton}
+          onPress={() => setShowFilterModal(true)}
         >
-          <View style={styles.dropdownList}>
+          <Text style={styles.filterButtonText}>
+            <Icon name="filter" size={16} color="#007AFF" /> {selectedCongressman}
+          </Text>
+          <Icon name="chevron-down" size={20} color="#007AFF" />
+        </TouchableOpacity>
+      </View>
+
+      {/* FILTER MODAL */}
+      <Modal
+        visible={showFilterModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowFilterModal(false)}
+      >
+        <View style={styles.modalBackground}>
+          <View style={styles.modalContainer}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Filter by Congressman</Text>
+              <TouchableOpacity onPress={() => setShowFilterModal(false)}>
+                <Icon name="close" size={24} color="#000" />
+              </TouchableOpacity>
+            </View>
+
             <FlatList
-              data={dates}
-              keyExtractor={(item) => item}
+              data={congressmenList}
+              keyExtractor={(item, idx) => idx.toString()}
               renderItem={({ item }) => (
                 <TouchableOpacity
-                  style={styles.dropdownItem}
+                  style={[
+                    styles.filterOption,
+                    selectedCongressman === item && styles.filterOptionSelected
+                  ]}
                   onPress={() => {
-                    setSelectedDate(item);
-                    setShowDropdown(false);
+                    setSelectedCongressman(item);
+                    setExpandedTicker(null);
+                    setShowFilterModal(false);
                   }}
                 >
-                  <Text>{item}</Text>
+                  <Text style={[
+                    styles.filterOptionText,
+                    selectedCongressman === item && styles.filterOptionTextSelected
+                  ]}>
+                    {item}
+                  </Text>
+                  {selectedCongressman === item && (
+                    <Icon name="check" size={20} color="#007AFF" />
+                  )}
                 </TouchableOpacity>
               )}
+              scrollEnabled
+              style={{ maxHeight: '80%' }}
             />
           </View>
-        </TouchableOpacity>
+        </View>
       </Modal>
 
-      {/* FlatList of items */}
       <FlatList
-        data={groupedData[selectedDate] || []}
-        keyExtractor={(_, index) => index.toString()}
+        data={groupedStocks}
+        keyExtractor={(item) => item.ticker}
         renderItem={renderItem}
-        contentContainerStyle={{ paddingBottom: 50 }}
-        onRefresh={() => fetchData(true)} // triggers refresh
+        onRefresh={() => fetchData(true)}
         refreshing={isRefreshing}
+        contentContainerStyle={{ paddingVertical: 10, paddingBottom: 40 }}
+        ListEmptyComponent={<Text style={styles.emptyText}>No trades found for {selectedCongressman}.</Text>}
       />
     </View>
   );
@@ -166,77 +221,136 @@ const HomeScreen = () => {
 export default HomeScreen;
 
 const styles = StyleSheet.create({
-  container: {
-    backgroundColor: '#F9FAFB',
-    paddingHorizontal: 12,
-    flex: 1,
-  },
-  dropdownButton: {
-    marginVertical: 10,
-    padding: 12,
+  container: { flex: 1, backgroundColor: '#F0F2F5' },
+  filterBar: {
+    padding: 16,
     backgroundColor: '#fff',
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#ddd',
+    borderBottomWidth: 1,
+    borderBottomColor: '#E1E4E8',
+    elevation: 4,
   },
-  dropdownButtonText: {
-    fontSize: 16,
-    color: '#333',
-  },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.2)',
-    justifyContent: 'center',
-    paddingHorizontal: 30,
-  },
-  dropdownList: {
-    backgroundColor: '#fff',
+  filterButton: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    backgroundColor: '#F8F9FA',
     borderRadius: 10,
-    padding: 10,
-    maxHeight: 300,
+    borderWidth: 1,
+    borderColor: '#D1D1D6',
   },
-  dropdownItem: {
-    paddingVertical: 10,
-    paddingHorizontal: 15,
+  filterButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#007AFF',
+  },
+  modalBackground: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'flex-end',
+  },
+  modalContainer: {
+    backgroundColor: '#fff',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    maxHeight: '80%',
+    paddingTop: 16,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingBottom: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E1E4E8',
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#1C1C1E',
+  },
+  filterOption: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 14,
     borderBottomWidth: 0.5,
-    borderColor: '#ccc',
+    borderBottomColor: '#E5E5EA',
+  },
+  filterOptionSelected: {
+    backgroundColor: '#F0F7FF',
+  },
+  filterOptionText: {
+    fontSize: 16,
+    color: '#3A3A3C',
+  },
+  filterOptionTextSelected: {
+    color: '#007AFF',
+    fontWeight: '600',
   },
   card: {
     backgroundColor: '#fff',
-    padding: 14,
-    paddingRight: 50, // ✅ reserve space for percent badge
-    borderRadius: 10,
-    marginBottom: 10,
-    shadowColor: '#000',
-    shadowOpacity: 0.1,
-    shadowRadius: 6,
-    shadowOffset: { width: 0, height: 2 },
+    marginHorizontal: 14,
+    borderRadius: 12,
+    marginBottom: 12,
     elevation: 2,
+    shadowColor: '#000',
+    shadowOpacity: 0.08,
+    shadowRadius: 5,
+    shadowOffset: { width: 0, height: 2 },
   },
-  ticker: {
-    fontSize: 16,
-    fontWeight: 'bold',
+  cardContent: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
   },
-  details: {
-    color: '#333',
-    marginTop: 2,
-  },
-  note: {
-    fontStyle: 'italic',
-    color: '#555',
-    marginTop: 4,
-  },
-  percent: {
-    position: 'absolute',
-    top: 10,
-    right: 10,
-    fontWeight: 'bold',
-    color: '#007AFF',
-  },
-  centered: {
+  cardTouchable: {
     flex: 1,
+  },
+  cardHeader: {
+    padding: 16,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center'
+  },
+  arrowButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 16,
     justifyContent: 'center',
     alignItems: 'center',
   },
-
+  ticker: { fontSize: 22, fontWeight: '900', color: '#1C1C1E' },
+  tradeCount: { color: '#007AFF', fontWeight: '600', fontSize: 14 },
+  dropdownContent: {
+    paddingHorizontal: 16,
+    paddingBottom: 12,
+    borderTopWidth: 1,
+    borderTopColor: '#F2F2F7',
+  },
+  txRow: { 
+    flexDirection: 'row', 
+    justifyContent: 'space-between', 
+    alignItems: 'center',
+    paddingVertical: 10, 
+    borderBottomWidth: 0.5, 
+    borderBottomColor: '#E5E5EA' 
+  },
+  txInfo: { flex: 1 },
+  txName: { fontSize: 15, fontWeight: '700', color: '#3A3A3C' },
+  txDate: { fontSize: 12, color: '#8E8E93', marginTop: 2 },
+  txBadge: { 
+    fontSize: 10, 
+    fontWeight: 'bold', 
+    paddingHorizontal: 8, 
+    paddingVertical: 4, 
+    borderRadius: 6,
+    overflow: 'hidden'
+  },
+  buyBadge: { backgroundColor: '#E8F5E9', color: '#2E7D32' },
+  sellBadge: { backgroundColor: '#FFEBEE', color: '#C62828' },
+  centered: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  emptyText: { textAlign: 'center', marginTop: 30, color: '#8E8E93' }
 });

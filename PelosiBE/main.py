@@ -1,26 +1,30 @@
-from fastapi import FastAPI
-from scraper import scrape_congress_trades
-from services.scheduler import start_scheduler
-from utils.file_io import save_data_grouped, load_existing_grouped_data, load_congresspeople, load_tickers
-from services.stocks import get_stock_info
-from datetime import datetime
+from fastapi import FastAPI, Body
+#from scraper import scrape_congress_trades
+#from services.scheduler import start_scheduler
+from utils.db_io import load_congresspeople, load_tickers, find_same_politician_same_stock_type, load_existing_data
+from services.stocks import get_stock_info, fetch_all_ticker_data  # Added fetch_all_ticker_data
+from utils.db import init_db
 import uvicorn
 
 app = FastAPI()
-start_scheduler() 
 
+@app.on_event("startup")
+def startup_event():
+    init_db()
+
+# --- ROUTES ---
 @app.get("/")
 def root():
     return {"message": "Congress Trade Scraper API running."}
 
-@app.get("/congresstrades")
-def get_trades():
-    try:
-        rows = scrape_congress_trades()
-        save_data_grouped(rows)
-        return {"message": "Scraped and saved.", "count": len(rows)}
-    except Exception as e:
-        return {"error": str(e)}
+# @app.get("/congresstrades")
+# def get_trades():
+#     try:
+#         rows = scrape_congress_trades()
+#         save_data_grouped(rows)
+#         return {"message": "Scraped and saved.", "count": len(rows)}
+#     except Exception as e:
+#         return {"error": str(e)}
 
 @app.get("/stocks/{ticker}")
 def stock_data(ticker: str, start: str, end: str):
@@ -28,11 +32,8 @@ def stock_data(ticker: str, start: str, end: str):
 
 @app.get("/stocks/fetch-all")
 def fetch_all_stocks(start: str, end: str):
+    console.log("Fetching all ticker data from external API...")
     return fetch_all_ticker_data(start, end)
-
-@app.get("/congresstrades/grouped")
-def get_grouped_data():
-    return load_existing_grouped_data()
 
 @app.get("/congresstrades/congresspeople")
 def get_congresspeople():
@@ -42,6 +43,20 @@ def get_congresspeople():
 def get_tickers():
     return load_tickers()
 
+@app.get("/congresstrades/load_existing_data")
+def get_grouped_data():
+    return load_existing_data()
+
+@app.post("/congresstrades/find_same_politician_same_stock_type")
+def api_get_same(trades: list[dict] = Body(...)):
+    results = []
+    for t in trades:
+        res = find_same_politician_same_stock_type(
+            ticker=t.get("ticker"),
+            politician=t.get("politician")
+        )
+        results.extend(res)
+    return results
 
 if __name__ == "__main__":
-    uvicorn.run("main:app", host="0.0.0.0", port=8000)
+    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)

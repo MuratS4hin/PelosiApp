@@ -1,9 +1,9 @@
 # scheduler.py
 from apscheduler.schedulers.background import BackgroundScheduler
 from scraper import scrape_congress_trades
-from utils.file_io import save_data_grouped
+from utils.db_io import save_data_grouped
 from services.stocks import fetch_all_ticker_data
-
+from datetime import datetime  # Import datetime to trigger immediate run
 import logging
 
 def run_daily_scrape():
@@ -17,6 +17,12 @@ def run_daily_scrape():
 
 def start_scheduler():
     scheduler = BackgroundScheduler()
-    scheduler.add_job(run_daily_scrape, trigger='cron', hour=10, minute=0)  # Run at 10:00 AM
+    scheduler.add_job(
+        run_daily_scrape, 
+        trigger='cron', 
+        hour=12, 
+        minute=0, 
+        next_run_time=datetime.now() 
+    )
     scheduler.start()
     logging.info("Scheduler started.")

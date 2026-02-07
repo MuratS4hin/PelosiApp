@@ -1,12 +1,23 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, ActivityIndicator, StyleSheet, Dimensions } from 'react-native';
+import { View, Text, ActivityIndicator, StyleSheet, Dimensions, TouchableOpacity } from 'react-native';
 import { LineChart } from 'react-native-chart-kit';
+import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
+import UseAppStore from '../store/UseAppStore';
 import ApiService from '../services/ApiService';
 
-const StockDetailScreen = ({ route }) => {
-  const { ticker, startDate, endDate } = route.params;
+const StockDetailScreen = ({ route, navigation }) => {
+  // Set default dates (last 1 year) if not provided
+  const now = new Date();
+  const oneYearAgo = new Date(now.getFullYear() - 1, now.getMonth(), now.getDate());
+  
+  const defaultStartDate = oneYearAgo.toISOString().split('T')[0];
+  const defaultEndDate = now.toISOString().split('T')[0];
+  
+  const { ticker, startDate = defaultStartDate, endDate = defaultEndDate } = route.params || {};
   const [stockData, setStockData] = useState(null);
   const [loading, setLoading] = useState(true);
+  const myAssets = UseAppStore((state) => state.myAssets);
+  const isAssetAdded = myAssets.some(asset => asset.ticker === ticker);
 
   useEffect(() => {
     const fetchStockInfo = async () => {
@@ -21,7 +32,25 @@ const StockDetailScreen = ({ route }) => {
     };
 
     fetchStockInfo();
-  }, []);
+  }, [ticker, startDate, endDate]);
+
+  // Update header options when isAssetAdded changes
+  useEffect(() => {
+    navigation.setOptions({
+      headerRight: () => (
+        <TouchableOpacity
+          style={{ marginRight: 10 }}
+          onPress={() => navigation.navigate('AddAssetScreen', { ticker: ticker })}
+        >
+          <Icon 
+            name={isAssetAdded ? "star" : "star-outline"} 
+            size={28} 
+            color="#FFD700" 
+          />
+        </TouchableOpacity>
+      ),
+    });
+  }, [isAssetAdded, ticker, navigation]);
 
   if (loading) {
     return <ActivityIndicator size="large" style={{ marginTop: 50 }} />;

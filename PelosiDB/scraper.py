@@ -12,5 +12,6 @@ def scrape_congress_trades():
 
         rows = page.query_selector_all("div.table-inner tbody tr")
         data = [[c.inner_text().strip() for c in r.query_selector_all("td")] for r in rows]
+        
         browser.close()
         return [row for row in data if row]
