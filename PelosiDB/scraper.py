@@ -14,4 +14,5 @@ def scrape_congress_trades():
         data = [[c.inner_text().strip() for c in r.query_selector_all("td")] for r in rows]
         
         browser.close()
+        print(f"Scraped {len(data)} rows of data.")
         return [row for row in data if row]

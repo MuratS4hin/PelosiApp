@@ -47,6 +47,40 @@ const HomeScreen = ({ navigation }) => {
     fetchData();
   }, []);
 
+  // Helpers to parse/format transaction dates
+  const parseTxDate = (rawField) => {
+    const raw = (rawField || '').toString().split('\n')[0].trim();
+    if (!raw) return null;
+    // Try native Date parsing first
+    let d = new Date(raw);
+    if (!isNaN(d.getTime())) return d;
+    // Try replacing dots with slashes
+    d = new Date(raw.replace(/\./g, '/'));
+    if (!isNaN(d.getTime())) return d;
+    // Try explicit dd/mm/yyyy or mm/dd/yyyy patterns
+    const m = raw.match(/^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{4})$/);
+    if (m) {
+      const g1 = parseInt(m[1], 10);
+      const g2 = parseInt(m[2], 10);
+      const y = parseInt(m[3], 10);
+      // mm/dd/yyyy
+      let d2 = new Date(y, g1 - 1, g2);
+      if (!isNaN(d2.getTime())) return d2;
+      // dd/mm/yyyy
+      d2 = new Date(y, g2 - 1, g1);
+      if (!isNaN(d2.getTime())) return d2;
+    }
+    return null;
+  };
+
+  const formatDateDDMMYYYY = (d) => {
+    if (!d) return '';
+    const day = String(d.getDate()).padStart(2, '0');
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const year = d.getFullYear();
+    return `${day}.${month}.${year}`;
+  };
+
   // Grouped Stocks (Sorted by Ticker A-Z)
   const groupedStocks = useMemo(() => {
     const filtered = selectedCongressman === 'All' 
@@ -56,11 +90,17 @@ const HomeScreen = ({ navigation }) => {
     const groups = filtered.reduce((acc, item) => {
       const ticker = item[0];
       if (!acc[ticker]) {
-        acc[ticker] = { ticker, transactions: [] };
+        acc[ticker] = { 
+          ticker, 
+          companyName: item[4] || '', // Company name from data
+          transactions: [] 
+        };
       }
+      const parsedDate = parseTxDate(item[2]);
       acc[ticker].transactions.push({
         name: item[1],
-        date: item[2],
+        dateRaw: item[2],
+        date: parsedDate,
         type: item[3],
       });
       return acc;
@@ -74,7 +114,11 @@ const HomeScreen = ({ navigation }) => {
 
     // Sort transactions inside each ticker by date (Descending / Newest First)
     sortedArray.forEach(stock => {
-      stock.transactions.sort((a, b) => new Date(b.date) - new Date(a.date));
+      stock.transactions.sort((a, b) => {
+        const ta = a.date ? a.date.getTime() : 0;
+        const tb = b.date ? b.date.getTime() : 0;
+        return tb - ta;
+      });
     });
 
     return sortedArray;
@@ -92,7 +136,10 @@ const HomeScreen = ({ navigation }) => {
             activeOpacity={0.7}
           >
             <View style={styles.cardHeader}>
-              <Text style={styles.ticker}>{item.ticker}</Text>
+              <View style={styles.tickerContainer}>
+                <Text style={styles.ticker}>{item.ticker}</Text>
+                {item.companyName && <Text style={styles.companyName} numberOfLines={1}>({item.companyName})</Text>}
+              </View>
               <Text style={styles.tradeCount}>
                 {item.transactions.length} trade{item.transactions.length > 1 ? 's' : ''}
               </Text>
@@ -118,7 +165,7 @@ const HomeScreen = ({ navigation }) => {
               <View key={`${item.ticker}-${tx.name}-${index}`} style={styles.txRow}>
                 <View style={styles.txInfo}>
                   <Text style={styles.txName}>{tx.name}</Text>
-                  <Text style={styles.txDate}>{tx.date}</Text>
+                  <Text style={styles.txDate}>{tx.date ? formatDateDDMMYYYY(tx.date) : (tx.dateRaw || '')}</Text>
                 </View>
                 <Text style={[
                   styles.txBadge, 
@@ -316,13 +363,18 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center'
   },
+  tickerContainer: {
+    flex: 1,
+    height: 30
+  },
   arrowButton: {
     paddingHorizontal: 12,
     paddingVertical: 16,
     justifyContent: 'center',
     alignItems: 'center',
   },
-  ticker: { fontSize: 22, fontWeight: '900', color: '#1C1C1E' },
+  ticker: { fontSize: 16, fontWeight: '900', color: '#1C1C1E' },
+  companyName: { fontSize: 11, fontWeight: '500', color: '#8E8E93', marginTop: 2},
   tradeCount: { color: '#007AFF', fontWeight: '600', fontSize: 14 },
   dropdownContent: {
     paddingHorizontal: 16,

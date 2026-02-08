@@ -11,6 +11,40 @@ def parse_date(date_str):
     except:
         return None
 
+def extract_company_name(stock_string):
+    """
+    Extract the company name from the stock string.
+    Example input: "NFLX\nNETFLIX, INC. - COMMON STOCK\nST"
+    Expected output: "NETFLIX"
+    
+    Args:
+        stock_string: The raw stock field containing ticker, company name, and type
+        
+    Returns:
+        Extracted company name (first word before comma or dash)
+    """
+    try:
+        parts = stock_string.split("\n")
+        if len(parts) < 2:
+            return ""
+        
+        # Get the second line which contains company name
+        company_line = parts[1].strip()
+        
+        # Extract the company name (first word or text before comma/dash)
+        # "NETFLIX, INC. - COMMON STOCK" -> "NETFLIX"
+        company_name = company_line.split(",")[0].strip()
+        
+        # If still too long, try splitting by dash
+        if len(company_name) > 20:
+            company_name = company_name.split(" - ")[0].strip()
+        
+        print(company_name)
+
+        return company_name
+    except:
+        return ""
+
 def save_data_grouped(rows):
     conn = get_db_connection()
     cur = conn.cursor()
@@ -43,14 +77,23 @@ def save_data_grouped(rows):
 
             # 3. Extract Stock
             ticker_raw = row[0].split("\n")[0].strip()
+            company_name = extract_company_name(row[0])
+            full_company_description = row[0].split("\n")[1].strip() if len(row[0].split("\n")) > 1 else ""
+            
             # If ticker is "-" (common in your JSON), use the company description instead
             if ticker_raw == "-" and "Company:" in row[5]:
                 ticker_raw = row[5].split(":")[1].split("(")[0].strip()[:10]
-
+            elif ticker_raw == "-":
+                company_name = row[0].split("\n")[1].strip()
+            
             cur.execute("""
-                INSERT INTO stocks (ticker, company_name) 
-                VALUES (%s, %s) ON CONFLICT (ticker) DO NOTHING RETURNING id
-            """, (ticker_raw, row[5]))
+                INSERT INTO stocks (ticker, company_name, name) 
+                VALUES (%s, %s, %s) 
+                ON CONFLICT (ticker) DO UPDATE SET 
+                    company_name=COALESCE(NULLIF(EXCLUDED.company_name, ''), stocks.company_name),
+                    name=COALESCE(NULLIF(EXCLUDED.name, ''), stocks.name)
+                RETURNING id
+            """, (ticker_raw, full_company_description, company_name))
             
             stock_res = cur.fetchone()
             stock_id = stock_res[0] if stock_res else None

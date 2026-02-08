@@ -1,9 +1,11 @@
-from fastapi import FastAPI, Body
+from fastapi import FastAPI, Body, Query
 #from scraper import scrape_congress_trades
 #from services.scheduler import start_scheduler
 from utils.db_io import load_congresspeople, load_tickers, find_same_politician_same_stock_type, load_existing_data
 from services.stocks import get_stock_info, fetch_all_ticker_data  # Added fetch_all_ticker_data
 from utils.db import init_db
+from utils.security import check_api_security
+from typing import Optional
 import uvicorn
 
 app = FastAPI()
@@ -27,28 +29,33 @@ def root():
 #         return {"error": str(e)}
 
 @app.get("/stocks/{ticker}")
-def stock_data(ticker: str, start: str, end: str):
+def stock_data(ticker: str, start: str, end: str, password: Optional[str] = Query(None)):
+    check_api_security(password)
     return get_stock_info(ticker, start, end)
 
 @app.get("/stocks/fetch-all")
-def fetch_all_stocks(start: str, end: str):
-    console.log("Fetching all ticker data from external API...")
+def fetch_all_stocks(start: str, end: str, password: Optional[str] = Query(None)):
+    check_api_security(password)
     return fetch_all_ticker_data(start, end)
 
 @app.get("/congresstrades/congresspeople")
-def get_congresspeople():
+def get_congresspeople(password: Optional[str] = Query(None)):
+    check_api_security(password)
     return load_congresspeople()
 
 @app.get("/congresstrades/tickers")
-def get_tickers():
+def get_tickers(password: Optional[str] = Query(None)):
+    check_api_security(password)
     return load_tickers()
 
 @app.get("/congresstrades/load_existing_data")
-def get_grouped_data():
+def get_grouped_data(password: Optional[str] = Query(None)):
+    check_api_security(password)
     return load_existing_data()
 
 @app.post("/congresstrades/find_same_politician_same_stock_type")
-def api_get_same(trades: list[dict] = Body(...)):
+def api_get_same(trades: list[dict] = Body(...), password: Optional[str] = Query(None)):
+    check_api_security(password)
     results = []
     for t in trades:
         res = find_same_politician_same_stock_type(

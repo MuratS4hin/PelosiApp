@@ -47,6 +47,7 @@ def init_db():
     CREATE TABLE IF NOT EXISTS stocks (
         id SERIAL PRIMARY KEY,
         ticker VARCHAR(100) UNIQUE NOT NULL,
+        name VARCHAR(100) UNIQUE NOT NULL,
         company_name TEXT
     );
     """)

@@ -6,7 +6,7 @@ import {
   ActivityIndicator,
   StyleSheet,
   TouchableOpacity,
-  Modal
+  Alert
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import UseAppStore from '../store/UseAppStore';
@@ -20,51 +20,16 @@ const MyAssetsScreen = () => {
   const removeAsset = UseAppStore((s) => s.removeAsset); // 🔥 delete function
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
-  const [showConfirm, setShowConfirm] = useState(false);
-  const [assetToDelete, setAssetToDelete] = useState(null);
-
-  useEffect(() => {
-    const fetchTrades = async () => {
-      setLoading(true);
-
-      try {
-        // const bodyData = myAssets
-        //   .filter(asset => asset.LastSoldDate == null)
-        //   .map(asset => ({
-        //     ticker: asset.ticker,
-        //     politician: asset.person
-        //   }));
-
-        // if (bodyData.length === 0) {
-        //   setLoading(false);
-        //   return;
-        // }
-
-        // const response = await ApiService.post(
-        //   'congresstrades/find_same_politician_same_stock_type',
-        //   bodyData
-        // );
-
-      } catch (error) {
-        console.error("Error fetching trades:", error);
-      } finally {
-        setLoading(false);
-        setRefreshing(false);
-      }
-    };
-
-    fetchTrades();
-  }, []);
 
   const confirmDelete = (ticker) => {
-    setAssetToDelete(ticker);
-    setShowConfirm(true);
-  };
-
-  const deleteAsset = () => {
-    removeAsset(assetToDelete);
-    setShowConfirm(false);
-    setAssetToDelete(null);
+    Alert.alert(
+      'Remove from List',
+      `Do you want to remove ${ticker} from your list?`,
+      [
+        { text: 'No', onPress: () => {}, style: 'cancel' },
+        { text: 'Yes', onPress: () => removeAsset(ticker), style: 'destructive' }
+      ]
+    );
   };
 
   const renderItem = ({ item }) => {
@@ -156,34 +121,6 @@ const MyAssetsScreen = () => {
         onRefresh={() => setRefreshing(true)}
       />
 
-      {/* DELETE CONFIRM POPUP */}
-      <Modal
-        visible={showConfirm}
-        transparent
-        animationType="fade"
-      >
-        <View style={styles.modalBackground}>
-          <View style={styles.modalBox}>
-            <Text style={styles.modalText}>Are you sure you want to delete?</Text>
-
-            <View style={styles.modalButtons}>
-              <TouchableOpacity
-                style={[styles.modalBtn, { backgroundColor: "#ff4444" }]}
-                onPress={deleteAsset}
-              >
-                <Text style={styles.modalBtnText}>Yes</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={[styles.modalBtn, { backgroundColor: "#aaa" }]}
-                onPress={() => setShowConfirm(false)}
-              >
-                <Text style={styles.modalBtnText}>No</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </Modal>
     </>
   );
 };
@@ -235,35 +172,5 @@ const styles = StyleSheet.create({
     marginTop: 4,
     fontStyle: "italic",
     color: "#555",
-  },
-  modalBackground: {
-    flex: 1,
-    backgroundColor: "rgba(0,0,0,0.5)",
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  modalBox: {
-    backgroundColor: "#FFF",
-    padding: 20,
-    borderRadius: 10,
-    width: "80%",
-  },
-  modalText: {
-    fontSize: 16,
-    textAlign: "center",
-  },
-  modalButtons: {
-    flexDirection: "row",
-    marginTop: 20,
-    justifyContent: "space-around",
-  },
-  modalBtn: {
-    paddingVertical: 10,
-    paddingHorizontal: 20,
-    borderRadius: 10,
-  },
-  modalBtnText: {
-    color: "#FFF",
-    fontSize: 16,
   },
 });

@@ -65,7 +65,7 @@ def load_existing_data():
         with conn.cursor() as cur:
             cur.execute("""
                 SELECT
-                    s.ticker, c.name, t.transaction_date, t.transaction_type
+                    s.ticker, c.name, t.transaction_date, t.transaction_type, s.name as ticker_name
                 FROM stocks s
                 LEFT JOIN (
                     SELECT *,

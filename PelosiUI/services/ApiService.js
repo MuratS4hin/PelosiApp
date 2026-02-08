@@ -1,10 +1,10 @@
-const BASE_URL = 'http://192.168.31.13:8000'; // Change this accordingly
+import { API_CONFIG, FINNHUB_CONFIG } from '../config/Config';
 
 export default class ApiService {
   static token = null; // Optional: token for auth
 
   static get getBaseUrl() {
-    return BASE_URL;
+    return API_CONFIG.BASE_URL;
   }
 
   static setToken(newToken) {
@@ -12,7 +12,10 @@ export default class ApiService {
   }
 
   static async request(endpoint, method = 'GET', body = null) {
-    const url = `${BASE_URL}/${endpoint}`;
+    // Add password as query parameter
+    const separator = endpoint.includes('?') ? '&' : '?';
+    const urlWithPassword = `${API_CONFIG.BASE_URL}/${endpoint}${separator}password=${encodeURIComponent(API_CONFIG.API_PASSWORD)}`;
+    
     const headers = {
       'Content-Type': 'application/json',
     };
@@ -31,16 +34,16 @@ export default class ApiService {
     }
 
     try {
-      const response = await fetch(url, config);
+      const response = await fetch(urlWithPassword, config);
       const data = await response.json();
 
       if (!response.ok) {
-        throw new Error(data.message || 'Request failed');
+        throw new Error(data.detail || data.message || 'Request failed');
       }
 
       return data;
     } catch (error) {
-      console.error(`[${method}] ${url} error:`, error);
+      console.error(`[${method}] ${urlWithPassword} error:`, error);
       throw error;
     }
   }
@@ -59,5 +62,22 @@ export default class ApiService {
 
   static delete(endpoint) {
     return this.request(endpoint, 'DELETE');
+  }
+
+  // Fetch company news from Finnhub (free tier available). Dates should be 'YYYY-MM-DD'
+  static async getFinnhubCompanyNews(symbol, from, to) {
+    if (!FINNHUB_CONFIG.API_KEY) {
+      throw new Error('FINNHUB_API_KEY not set in Config.js');
+    }
+    const url = `${FINNHUB_CONFIG.BASE_URL}/company-news?symbol=${encodeURIComponent(symbol)}&from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}&token=${encodeURIComponent(FINNHUB_CONFIG.API_KEY)}`;
+    try {
+      const res = await fetch(url);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Finnhub request failed');
+      return data;
+    } catch (err) {
+      console.error('[FINNHUB] fetch error:', err);
+      throw err;
+    }
   }
 }
