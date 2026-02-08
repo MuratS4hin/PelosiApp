@@ -1,4 +1,4 @@
-import { API_CONFIG, FINNHUB_CONFIG } from '../config/Config';
+import { API_CONFIG } from '../config/Config';
 
 export default class ApiService {
   static token = null; // Optional: token for auth
@@ -64,20 +64,15 @@ export default class ApiService {
     return this.request(endpoint, 'DELETE');
   }
 
-  // Fetch company news from Finnhub (free tier available). Dates should be 'YYYY-MM-DD'
+  //_______________________Finnhub operations__________________________
+  
+  // Get stock recommendation trends (proxy via backend)
+  static async getFinnhubRecommendationTrends(symbol) {
+    return this.request(`stocks/recommendation-trends/${encodeURIComponent(symbol)}`, 'GET');
+  }
+
+  // Company news (proxy via backend). Dates should be 'YYYY-MM-DD'
   static async getFinnhubCompanyNews(symbol, from, to) {
-    if (!FINNHUB_CONFIG.API_KEY) {
-      throw new Error('FINNHUB_API_KEY not set in Config.js');
-    }
-    const url = `${FINNHUB_CONFIG.BASE_URL}/company-news?symbol=${encodeURIComponent(symbol)}&from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}&token=${encodeURIComponent(FINNHUB_CONFIG.API_KEY)}`;
-    try {
-      const res = await fetch(url);
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Finnhub request failed');
-      return data;
-    } catch (err) {
-      console.error('[FINNHUB] fetch error:', err);
-      throw err;
-    }
+    return this.request(`stocks/company-news/${encodeURIComponent(symbol)}?start=${encodeURIComponent(from)}&end=${encodeURIComponent(to)}`, 'GET');
   }
 }

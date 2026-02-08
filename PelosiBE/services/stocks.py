@@ -1,4 +1,6 @@
 from datetime import datetime
+import os
+import requests
 import yfinance as yf
 from utils.db_io import load_tickers
 
@@ -87,6 +89,48 @@ def fetch_all_ticker_data(start: str = None, end: str = None, output_path="data/
             json.dump(result, f, indent=2)
 
         return {"message": "Stock data fetched and saved.", "count": len(result)}
+
+    except Exception as e:
+        return {"error": str(e)}
+
+
+def get_recommendation_trends(ticker: str):
+    try:
+        api_key = os.getenv("FINNHUB_API_KEY")
+        if not api_key:
+            return {"error": "FINNHUB_API_KEY not set"}
+
+        url = "https://finnhub.io/api/v1/stock/recommendation"
+        resp = requests.get(url, params={"symbol": ticker.upper(), "token": api_key}, timeout=15)
+        if not resp.ok:
+            return {"error": f"Finnhub request failed: {resp.status_code}", "detail": resp.text}
+
+        content_type = resp.headers.get("Content-Type", "")
+        if "application/json" not in content_type:
+            return {"error": "Unexpected Finnhub response", "detail": resp.text}
+
+        return resp.json()
+
+    except Exception as e:
+        return {"error": str(e)}
+
+
+def get_company_news(ticker: str, start: str, end: str):
+    try:
+        api_key = os.getenv("FINNHUB_API_KEY")
+        if not api_key:
+            return {"error": "FINNHUB_API_KEY not set"}
+
+        url = "https://finnhub.io/api/v1/company-news"
+        resp = requests.get(
+            url,
+            params={"symbol": ticker.upper(), "from": start, "to": end, "token": api_key},
+            timeout=15,
+        )
+        if not resp.ok:
+            return {"error": f"Finnhub request failed: {resp.status_code}", "detail": resp.text}
+
+        return resp.json()
 
     except Exception as e:
         return {"error": str(e)}

@@ -8,3 +8,4 @@ PelosiBE/db
 PelosiDB/venv
 PelosiBE/db/congresspeople.json
 PelosiBE/db/tickers.json
+PelosiBE/.env

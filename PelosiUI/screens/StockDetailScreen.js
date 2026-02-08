@@ -20,6 +20,8 @@ const StockDetailScreen = ({ route, navigation }) => {
   const [txLoading, setTxLoading] = useState(true);
   const [news, setNews] = useState([]);
   const [newsLoading, setNewsLoading] = useState(false);
+  const [recommendations, setRecommendations] = useState([]);
+  const [recLoading, setRecLoading] = useState(false);
   const [selectedTx, setSelectedTx] = useState(null);
   const [showTxModal, setShowTxModal] = useState(false);
   const myAssets = UseAppStore((state) => state.myAssets);
@@ -70,6 +72,20 @@ const StockDetailScreen = ({ route, navigation }) => {
       }
     };
     fetchNews();
+    // fetch recommendation trends (finnhub)
+    const fetchRecommendations = async () => {
+      setRecLoading(true);
+      try {
+        const rec = await ApiService.getFinnhubRecommendationTrends(ticker);
+        setRecommendations(Array.isArray(rec) ? rec : []);
+      } catch (e) {
+        console.warn('Could not load recommendations:', e.message || e);
+        setRecommendations([]);
+      } finally {
+        setRecLoading(false);
+      }
+    };
+    fetchRecommendations();
   }, [ticker, startDate, endDate]);
 
   // Fetch transactions (raw rows) and filter by ticker
@@ -132,6 +148,7 @@ const StockDetailScreen = ({ route, navigation }) => {
   const low = chartCloses.length ? Math.min(...chartCloses) : null;
   const avg = chartCloses.length ? (chartCloses.reduce((a,b) => a+b,0) / chartCloses.length) : null;
   const pctChange = chartCloses.length > 1 ? (((chartCloses[chartCloses.length-1] - chartCloses[0]) / chartCloses[0]) * 100) : null;
+  const latestRec = Array.isArray(recommendations) && recommendations.length > 0 ? recommendations[0] : null;
 
   // Helpers to parse and format transaction/report dates
   const parseTxDate = (rawField) => {
@@ -289,6 +306,61 @@ const StockDetailScreen = ({ route, navigation }) => {
             </View>
           </View>
 
+          {/* Recommendation Trends */}
+          {/* <Text style={styles.sectionTitle}>Recommendation Trends</Text> */}
+          {recLoading ? (
+            <ActivityIndicator style={{ marginTop: 8 }} />
+          ) : latestRec ? (
+            (() => {
+              const strongBuy = Number(latestRec.strongBuy ?? 0);
+              const buy = Number(latestRec.buy ?? 0);
+              const hold = Number(latestRec.hold ?? 0);
+              const sell = Number(latestRec.sell ?? 0);
+              const strongSell = Number(latestRec.strongSell ?? 0);
+              const total = strongBuy + buy + hold + sell + strongSell;
+
+              if (!total) {
+                return <Text style={styles.recEmpty}>No recommendation data available</Text>;
+              }
+
+              return (
+                <View style={{ marginTop: 6 }}>
+                  <View style={styles.recBar}>
+                    {strongBuy > 0 && <View style={[styles.recSegment, styles.recStrongBuy, { flex: strongBuy }]} />}
+                    {buy > 0 && <View style={[styles.recSegment, styles.recBuy, { flex: buy }]} />}
+                    {hold > 0 && <View style={[styles.recSegment, styles.recHold, { flex: hold }]} />}
+                    {sell > 0 && <View style={[styles.recSegment, styles.recSell, { flex: sell }]} />}
+                    {strongSell > 0 && <View style={[styles.recSegment, styles.recStrongSell, { flex: strongSell }]} />}
+                  </View>
+                  <View style={styles.recLegend}>
+                    <View style={styles.recLegendItem}>
+                      <View style={[styles.recLegendDot, styles.recStrongBuy]} />
+                      <Text style={styles.recLegendText}>Strong Buy</Text>
+                    </View>
+                    <View style={styles.recLegendItem}>
+                      <View style={[styles.recLegendDot, styles.recBuy]} />
+                      <Text style={styles.recLegendText}>Buy</Text>
+                    </View>
+                    <View style={styles.recLegendItem}>
+                      <View style={[styles.recLegendDot, styles.recHold]} />
+                      <Text style={styles.recLegendText}>Hold</Text>
+                    </View>
+                    <View style={styles.recLegendItem}>
+                      <View style={[styles.recLegendDot, styles.recSell]} />
+                      <Text style={styles.recLegendText}>Sell</Text>
+                    </View>
+                    <View style={styles.recLegendItem}>
+                      <View style={[styles.recLegendDot, styles.recStrongSell]} />
+                      <Text style={styles.recLegendText}>Strong Sell</Text>
+                    </View>
+                  </View>
+                </View>
+              );
+            })()
+          ) : (
+            <Text style={styles.recEmpty}>No recommendation data available</Text>
+          )}
+
           <Text style={[styles.sectionTitle, { marginTop: 20 }]}>Transactions</Text>
           {txLoading && <ActivityIndicator style={{ marginTop: 0 }} />}
         </View>
@@ -419,6 +491,18 @@ const styles = StyleSheet.create({
   newsHeadline: { fontSize: 13, fontWeight: '700', color: '#1C1C1E', lineHeight: 18 },
   newsSource: { fontSize: 11, fontWeight: '600', color: '#007AFF' },
   newsDate: { fontSize: 11, color: '#8E8E93' },
+  recBar: { flexDirection: 'row', height: 12, borderRadius: 6, overflow: 'hidden', backgroundColor: '#E5E7EB' },
+  recSegment: { height: '100%' },
+  recStrongBuy: { backgroundColor: '#1B5E20' },
+  recBuy: { backgroundColor: '#2E7D32' },
+  recHold: { backgroundColor: '#FBC02D' },
+  recSell: { backgroundColor: '#EF6C00' },
+  recStrongSell: { backgroundColor: '#C62828' },
+  recLegend: { flexDirection: 'row', justifyContent: 'space-between', flexWrap: 'wrap', marginTop: 10 },
+  recLegendItem: { flexDirection: 'row', alignItems: 'center', marginRight: 12, marginBottom: 6 },
+  recLegendDot: { width: 8, height: 8, borderRadius: 4, marginRight: 6 },
+  recLegendText: { fontSize: 11, color: '#6B7280' },
+  recEmpty: { marginTop: 6, color: '#8E8E93' },
   priceRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   priceBox: { alignItems: 'flex-end' },
   priceText: { fontSize: 20, fontWeight: '800', color: '#1C1C1E' },
@@ -427,7 +511,7 @@ const styles = StyleSheet.create({
   percentUp: { backgroundColor: '#2E7D32' },
   percentDown: { backgroundColor: '#C62828' },
   companyText: { color: '#6B7280', marginTop: 2 },
-  txCard: { backgroundColor: '#fff', marginHorizontal: 16, borderRadius: 12, padding: 12, marginBottom: 12, elevation: 1, shadowColor: '#000', shadowOpacity: 0.03, shadowRadius: 6, shadowOffset: { width: 0, height: 2 } },
+  txCard: { backgroundColor: '#fff', marginHorizontal: 16, borderRadius: 12, padding: 8, marginBottom: 8, elevation: 1, shadowColor: '#000', shadowOpacity: 0.03, shadowRadius: 6, shadowOffset: { width: 0, height: 2 } },
   txRowInner: { flexDirection: 'row', alignItems: 'center' },
   amountText: { fontSize: 12, color: '#111827', marginTop: 6, fontWeight: '700' },
 });

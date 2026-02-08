@@ -6,3 +6,4 @@ beautifulsoup4
 requests
 apscheduler
 yfinance
+python-dotenv
