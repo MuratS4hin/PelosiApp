@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, ActivityIndicator, StyleSheet, Dimensions, TouchableOpacity, FlatList, ScrollView, Linking, Modal, Pressable, Alert } from 'react-native';
-import { LineChart } from 'react-native-chart-kit';
+import { LineChart } from 'react-native-gifted-charts';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import UseAppStore from '../store/UseAppStore';
 import ApiService from '../services/ApiService';
@@ -230,60 +230,96 @@ const StockDetailScreen = ({ route, navigation }) => {
             </View>
           </View>
 
-          {/* Chart with moving average overlay */}
-          {stockData.chart && (
-            (() => {
-              // prepare moving average series (30-day)
-              const closes = chartCloses;
-              /*const maWindow = 30;
-              const ma = closes.map((_, i) => {
-                const start = Math.max(0, i - maWindow + 1);
-                const slice = closes.slice(start, i + 1);
-                const sum = slice.reduce((a, b) => a + b, 0);
-                return +(sum / slice.length).toFixed(2);
-              });*/
+          {/* Interactive Chart */}
+          {stockData.chart && stockData.chart.length > 0 && (() => {
+            const isPositive = pctChange >= 0;
+            const lineColor = isPositive ? '#10B981' : '#EF4444';
+            const gradientColor = isPositive ? '#10B98140' : '#EF444440';
+            
+            // Create data points with labels
+            const chartData = stockData.chart.map((point, index) => {
+              const date = new Date(point.date);
+              const day = String(date.getDate()).padStart(2, '0');
+              const month = String(date.getMonth() + 1).padStart(2, '0');
+              const year = date.getFullYear();
+              
+              return {
+                value: Number(point.close),
+                date: `${day}.${month}.${year}`,
+                label: index % Math.floor(stockData.chart.length / 6) === 0 ? `${day}.${month}` : '',
+                labelTextStyle: { color: '#6B7280', fontSize: 10 }
+              };
+            });
 
-              // color based on recent change
-              const areaColor = (pctChange >= 0) ? '#E8F5E9' : '#FFEBEE';
+            const screenWidth = Dimensions.get('window').width;
+            const parentPadding = 40; // 20 on each side
+            const containerPadding = 3; // 10 on each side
+            const yAxisWidth = 45;
+            const availableWidth = screenWidth - parentPadding - containerPadding;
+            const plotWidth = availableWidth - yAxisWidth - 10; // extra margin for safety
+            
+            const spacing = chartData.length > 1 ? Math.min(plotWidth / (chartData.length - 1), 40) : 20;
+            const maxVal = high ? high * 1.05 : 100;
 
-              return (
+            return (
+              <View style={styles.chartContainer}>
                 <LineChart
-                  data={{
-                    labels: stockData.chart
-                      .filter((_, index, arr) => index % Math.max(1, Math.floor(arr.length / 6)) === 0)
-                      .map(p => {
-                        const date = new Date(p.date);
-                        const day = String(date.getDate()).padStart(2, '0');
-                        const month = String(date.getMonth() + 1).padStart(2, '0');
-                        return `${day}.${month}`;
-                      }),
-                    datasets: [
-                      { data: closes, color: () => '#007AFF' },
-                      //{ data: ma, color: () => '#888888' }
-                    ],
+                  data={chartData}
+                  width={availableWidth}
+                  height={220}
+                  spacing={spacing}
+                  initialSpacing={0}
+                  endSpacing={0}
+                  color={lineColor}
+                  thickness={3}
+                  startFillColor={gradientColor}
+                  endFillColor={gradientColor}
+                  startOpacity={0.9}
+                  endOpacity={0.3}
+                  curved
+                  areaChart
+                  hideDataPoints={false}
+                  dataPointsHeight={1}
+                  dataPointsWidth={1}
+                  dataPointsColor={lineColor}
+                  dataPointsRadius={0.5}
+                  textColor1="#6B7280"
+                  textShiftY={-8}
+                  textShiftX={-10}
+                  textFontSize={10}
+                  yAxisColor="#E5E7EB"
+                  xAxisColor="#E5E7EB"
+                  yAxisThickness={1}
+                  xAxisThickness={1}
+                  yAxisTextStyle={{ color: '#6B7280', fontSize: 11 }}
+                  rulesColor="#E5E7EB"
+                  rulesType="solid"
+                  yAxisLabelWidth={45}
+                  noOfSections={5}
+                  maxValue={maxVal}
+                  pointerConfig={{
+                    pointerStripHeight: 200,
+                    pointerStripColor: lineColor,
+                    pointerStripWidth: 2,
+                    pointerColor: lineColor,
+                    radius: 6,
+                    pointerLabelWidth: 120,
+                    pointerLabelHeight: 90,
+                    activatePointersOnLongPress: false,
+                    autoAdjustPointerLabelPosition: true,
+                    pointerLabelComponent: items => {
+                      return (
+                        <View style={styles.tooltipContainer}>
+                          <Text style={styles.tooltipDate}>{items[0].date}</Text>
+                          <Text style={styles.tooltipPrice}>${items[0].value.toFixed(2)}</Text>
+                        </View>
+                      );
+                    },
                   }}
-                  width={Dimensions.get('window').width - 40}
-                  withVerticalLabels={true}
-                  withHorizontalLabels={true}
-                  height={240}
-                  withDots={false}
-                  chartConfig={{
-                    backgroundColor: '#fff',
-                    backgroundGradientFrom: '#ffffff',
-                    backgroundGradientTo: '#ffffff',
-                    color: () => '#007AFF',
-                    labelColor: () => '#555',
-                    strokeWidth: 2,
-                    propsForBackgroundLines: { stroke: '#f5f5f7' },
-                    fillShadowGradient: areaColor,
-                    fillShadowGradientOpacity: 0.15
-                  }}
-                  bezier
-                  style={{ marginTop: 20, borderRadius: 12 }}
                 />
-              );
-            })()
-          )}
+              </View>
+            );
+          })()}
 
           {/* Data & Analytics */}
           <Text style={styles.sectionTitle}>Data & Analytics</Text>
@@ -514,6 +550,45 @@ const styles = StyleSheet.create({
   txCard: { backgroundColor: '#fff', marginHorizontal: 16, borderRadius: 12, padding: 8, marginBottom: 8, elevation: 1, shadowColor: '#000', shadowOpacity: 0.03, shadowRadius: 6, shadowOffset: { width: 0, height: 2 } },
   txRowInner: { flexDirection: 'row', alignItems: 'center' },
   amountText: { fontSize: 12, color: '#111827', marginTop: 6, fontWeight: '700' },
+  chartContainer: {
+    marginTop: 20,
+    marginHorizontal: 0,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    paddingVertical: 16,
+    paddingHorizontal: 10,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 8,
+    elevation: 2,
+    borderWidth: 1,
+    borderColor: '#F3F4F6',
+  },
+  tooltipContainer: {
+    backgroundColor: 'rgba(0, 0, 0, 0.85)',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: 10,
+    minWidth: 100,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 5,
+  },
+  tooltipDate: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '600',
+    marginBottom: 4,
+  },
+  tooltipPrice: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '700',
+  },
 });
 
 export default StockDetailScreen;
