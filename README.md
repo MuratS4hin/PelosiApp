@@ -182,6 +182,15 @@ The `PelosiBE` service exposes the following endpoints. All endpoints require th
 
 ### ⚙️ Configuration
 
+**Path** `./PelosiUI/config/Config.js`
+
+```env
+# API Configuration
+export const API_CONFIG = {
+  BASE_URL: 'http://<your_ip_address>:8000',
+  API_PASSWORD: '<your_secret_api_password>',
+};
+```
 
 **Path:** `./PelosiBE/.env`
 
