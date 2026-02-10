@@ -1,9 +1,9 @@
 fastapi
 uvicorn
-playwright
 pandas
 beautifulsoup4
 requests
 apscheduler
 yfinance
 python-dotenv
+psycopg2-binary

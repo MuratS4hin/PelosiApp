@@ -1,0 +1,36 @@
+FROM python:3.10-slim
+
+# Keep environment small
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1
+
+WORKDIR /app
+
+# Install minimal system deps required for some wheels (avoid large packages)
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+       ca-certificates \
+       gcc \
+       libpq-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy only requirements first (better cache behavior)
+COPY requirements.txt ./
+
+# Install python deps without cache
+RUN pip install --upgrade pip \
+    && pip install --no-cache-dir -r requirements.txt
+
+# NOTE: Playwright and browser binaries are large. If you don't need
+# browser automation in the container, remove `playwright` from
+# `requirements.txt` and skip the next step. If you need Playwright,
+# uncomment the install line (it will increase image size significantly).
+# RUN playwright install --with-deps chromium
+
+# Copy app sources
+COPY . .
+
+EXPOSE 3000
+
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "3000"]

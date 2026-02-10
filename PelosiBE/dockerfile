@@ -34,8 +34,9 @@ COPY requirements.txt .
 RUN pip install --upgrade pip
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Install Playwright browsers
-RUN playwright install --with-deps chromium
+# Playwright browser install removed to keep image small.
+# If you require browser automation, reinstall Playwright and run
+# `playwright install --with-deps chromium` (note: this increases image size).
 
 # Copy the app code
 COPY . .
