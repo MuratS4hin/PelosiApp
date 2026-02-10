@@ -23,4 +23,3 @@ PelosiDB/
 .venv/
 *.tar
 pelosi-be.tar
-.env

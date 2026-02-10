@@ -4,8 +4,11 @@ PelosiBE/venv
 PelosiBE/db/congresstrades_grouped.json
 PelosiUI/.expo/README.md
 PelosiUI/.expo/devices.json
+PelosiUI/app.json
+PelosiUI/eas.json
 PelosiBE/db
 PelosiDB/venv
 PelosiBE/db/congresspeople.json
 PelosiBE/db/tickers.json
 PelosiBE/.env
+PelosiDB/.env

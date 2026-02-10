@@ -11,29 +11,10 @@ API_PASSWORD = os.getenv("API_PASSWORD", "secret_key")
 
 
 def verify_password(provided_password: str) -> bool:
-    """
-    Verify if the provided password matches the API password.
-    
-    Args:
-        provided_password: The password provided in the request
-        
-    Returns:
-        True if password is correct, False otherwise
-    """
     return provided_password == API_PASSWORD
 
 
 def check_api_security(password: Optional[str] = None) -> None:
-    """
-    Check API security by verifying the provided password.
-    Use this as a dependency in FastAPI routes.
-    
-    Args:
-        password: The password to verify
-        
-    Raises:
-        HTTPException: If password is missing or incorrect
-    """
     if password is None:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -50,16 +31,6 @@ def check_api_security(password: Optional[str] = None) -> None:
 
 
 def require_auth(func):
-    """
-    Decorator to require authentication for a function.
-    Used for protecting functions that are called internally.
-    
-    Args:
-        func: The function to protect
-        
-    Returns:
-        Wrapped function that requires password
-    """
     @wraps(func)
     def wrapper(*args, password: Optional[str] = None, **kwargs):
         check_api_security(password)

@@ -1,15 +1,25 @@
-import psycopg2
-from psycopg2 import pool
 import os
 
-# Database configuration - Use environment variables in production!
+import psycopg2
+from psycopg2 import pool
+from dotenv import load_dotenv
+
+load_dotenv()
+
+def _get_required_env(name: str) -> str:
+    value = os.getenv(name)
+    if not value:
+        raise RuntimeError(f"Missing required environment variable: {name}")
+    return value
+
+# Database configuration - Use environment variables
 DB_CONFIG = {
-    "host": "ep-quiet-dust-a8yflq7j-pooler.eastus2.azure.neon.tech",
-    "database": "neondb",
-    "user": "neondb_owner",
-    "password": "npg_CArg8f6RiuWH",
-    "port": "5432",
-    "sslmode": "require"
+    "host": _get_required_env("DB_HOST"),
+    "database": _get_required_env("DB_NAME"),
+    "user": _get_required_env("DB_USER"),
+    "password": _get_required_env("DB_PASSWORD"),
+    "port": _get_required_env("DB_PORT"),
+    "sslmode": _get_required_env("DB_SSLMODE"),
 }
 
 # Initialize connection pool

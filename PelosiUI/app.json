@@ -1,7 +1,7 @@
 {
   "expo": {
-    "name": "reactapp",
-    "slug": "reactapp",
+    "name": "pelosiapp",
+    "slug": "pelosiapp",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -13,7 +13,11 @@
       "backgroundColor": "#ffffff"
     },
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "pelosiapp",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -24,6 +28,11 @@
     },
     "web": {
       "favicon": "./assets/favicon.png"
+    },
+    "extra": {
+      "eas": {
+        "projectId": "e2e80dee-cef8-4d1c-a978-34cf947b2293"
+      }
     }
   }
 }
