@@ -1,14 +1,29 @@
 # PelosiApp
 
-PelosiApp is a full-stack application designed to track and display stock trades made by members of the U.S. Congress. It consists of a React Native mobile application, a FastAPI backend to serve the data, and a separate database service that scrapes and stores the trade information.
-
-## Architecture
-
-The project is a monorepo containing three distinct services:
-
-1.  **`PelosiUI` (Frontend):** A mobile application built with React Native and Expo. It provides the user interface for viewing congressional trade data, stock details, and managing a personal asset watchlist.
-2.  **`PelosiBE` (Backend):** A FastAPI server that acts as the primary API for the mobile frontend. It queries the database and fetches external stock data from sources like yfinance and Finnhub.
-3.  **`PelosiDB` (Database Service):** A dedicated FastAPI service responsible for database management. It includes a scheduled task (`apscheduler`) to scrape congressional trading data and populate the PostgreSQL database.
+<table>
+  <tr>
+    <td width="60%" style="vertical-align: top;">
+      <p>
+        <strong>PelosiApp</strong> is a full-stack application designed to track and display stock trades made by members of the U.S. Congress.
+      </p>
+      <p>
+        It consists of a React Native mobile application, a FastAPI backend to serve the data, and a separate database service that scrapes and stores the trade information.
+      </p>
+      <hr />
+      <strong>🏗️ Architecture</strong>
+      <p>The project is a monorepo containing three distinct services:</p>
+      <ul>
+        <li><strong>PelosiUI (Frontend):</strong> A mobile application built with React Native and Expo. It provides the user interface for viewing congressional trade data, stock details, and managing a personal asset watchlist.</li>
+        <li><strong>PelosiBE (Backend):</strong> A FastAPI server that acts as the primary API for the mobile frontend. It queries the database and fetches external stock data from sources like yfinance and Finnhub.</li>
+        <li><strong>PelosiDB (Database Service):</strong> A dedicated FastAPI service responsible for database management. It includes a scheduled task (apscheduler) to scrape congressional trading data and populate the PostgreSQL database.</li>
+      </ul>
+    </td>
+    <td width="18%" style="vertical-align: top;">
+      <video src="https://github.com/user-attachments/assets/a6e57717-d70f-4d68-b8c6-01910233bf0a" width="100%" controls>
+      </video>
+    </td>
+  </tr>
+</table>
 
 ## Features
 
@@ -49,6 +64,53 @@ The project is a monorepo containing three distinct services:
 -   Node.js and a package manager (npm or yarn)
 -   Docker and Docker Compose
 -   A running PostgreSQL instance
+
+### ⚙️ Configuration
+
+**Path** `./PelosiUI/config/Config.js`
+
+```env
+# API Configuration
+export const API_CONFIG = {
+  BASE_URL: 'http://<your_ip_address>:8000',
+  API_PASSWORD: '<your_secret_api_password>',
+};
+```
+
+**Path:** `./PelosiBE/.env`
+
+```env
+# External API Keys
+FINNHUB_API_KEY=<your_finnhub_api_key>
+
+# Database Connection
+DB_HOST=<your_host>
+DB_NAME=<your_db_name>
+DB_USER=<your_owner>
+DB_PASSWORD=<your_password>
+DB_PORT=<your_port>
+DB_SSLMODE=require
+
+# Security
+API_PASSWORD=<your_secret_api_password>
+
+```
+
+**Path:** `./PelosiDB/.env`
+
+```env
+# Database Connection
+DB_HOST=<your_host>
+DB_NAME=<your_db_name>
+DB_USER=<your_owner>
+DB_PASSWORD=<your_password>
+DB_PORT=<your_port>
+DB_SSLMODE=require
+
+# Security
+API_PASSWORD=<your_secret_api_password>
+```
+
 
 ### 1. Environment Variables
 
@@ -178,53 +240,6 @@ The `PelosiBE` service exposes the following endpoints. All endpoints require th
 | `GET`  | `/congresstrades/tickers`                            | Get a list of all unique stock tickers that have been traded.            |
 | `GET`  | `/congresstrades/load_existing_data`                 | Loads all transaction data, grouped for display on the home screen.      |
 | `POST` | `/congresstrades/find_same_politician_same_stock_type` | (Internal utility) Finds trades by the same politician for the same stock. |
-
-
-### ⚙️ Configuration
-
-**Path** `./PelosiUI/config/Config.js`
-
-```env
-# API Configuration
-export const API_CONFIG = {
-  BASE_URL: 'http://<your_ip_address>:8000',
-  API_PASSWORD: '<your_secret_api_password>',
-};
-```
-
-**Path:** `./PelosiBE/.env`
-
-```env
-# External API Keys
-FINNHUB_API_KEY=<your_finnhub_api_key>
-
-# Database Connection
-DB_HOST=<your_host>
-DB_NAME=<your_db_name>
-DB_USER=<your_owner>
-DB_PASSWORD=<your_password>
-DB_PORT=<your_port>
-DB_SSLMODE=require
-
-# Security
-API_PASSWORD=<your_secret_api_password>
-
-```
-
-**Path:** `./PelosiDB/.env`
-
-```env
-# Database Connection
-DB_HOST=<your_host>
-DB_NAME=<your_db_name>
-DB_USER=<your_owner>
-DB_PASSWORD=<your_password>
-DB_PORT=<your_port>
-DB_SSLMODE=require
-
-# Security
-API_PASSWORD=<your_secret_api_password>
-```
 
 > [!WARNING]
 > **Security Note:** Never commit your `.env` files to version control. Ensure they are listed in your `.gitignore` to prevent leaking sensitive credentials.
