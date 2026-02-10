@@ -178,3 +178,46 @@ The `PelosiBE` service exposes the following endpoints. All endpoints require th
 | `GET`  | `/congresstrades/tickers`                            | Get a list of all unique stock tickers that have been traded.            |
 | `GET`  | `/congresstrades/load_existing_data`                 | Loads all transaction data, grouped for display on the home screen.      |
 | `POST` | `/congresstrades/find_same_politician_same_stock_type` | (Internal utility) Finds trades by the same politician for the same stock. |
+
+
+### ⚙️ Configuration
+
+
+**Path:** `./PelosiBE/.env`
+
+```env
+# External API Keys
+FINNHUB_API_KEY=<your_finnhub_api_key>
+
+# Database Connection
+DB_HOST=<your_host>
+DB_NAME=<your_db_name>
+DB_USER=<your_owner>
+DB_PASSWORD=<your_password>
+DB_PORT=<your_port>
+DB_SSLMODE=require
+
+# Security
+API_PASSWORD=<your_secret_api_password>
+
+```
+
+**Path:** `./PelosiDB/.env`
+
+```env
+# Database Connection
+DB_HOST=<your_host>
+DB_NAME=<your_db_name>
+DB_USER=<your_owner>
+DB_PASSWORD=<your_password>
+DB_PORT=<your_port>
+DB_SSLMODE=require
+
+# Security
+API_PASSWORD=<your_secret_api_password>
+```
+
+> [!WARNING]
+> **Security Note:** Never commit your `.env` files to version control. Ensure they are listed in your `.gitignore` to prevent leaking sensitive credentials.
+
+
