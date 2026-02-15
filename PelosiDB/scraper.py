@@ -3,6 +3,11 @@ from playwright.sync_api import sync_playwright
 def scrape_congress_trades():
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=True)
+        # For Linux, you may need to specify the path to the Chromium executable if it's not in the default location. Uncomment the lines below and adjust the path as needed.
+        # browser = p.chromium.launch(
+        #     executable_path="/usr/bin/chromium-browser", 
+        #     headless=True
+        # )
         context = browser.new_context(
             user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/115.0.0.0 Safari/537.36"
         )
