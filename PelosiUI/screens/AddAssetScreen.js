@@ -14,6 +14,7 @@ import ApiService from '../services/ApiService';
 
 const AddAssetScreen = ({ navigation, route }) => {
   const addAsset = UseAppStore((state) => state.addAsset);
+  const user = UseAppStore((state) => state.user);
   const [tickerList, setTickerList] = useState([]);
   const [showDropdown, setShowDropdown] = useState(false);
   const [ticker, setTicker] = useState(route.params?.ticker || '');
@@ -51,8 +52,22 @@ const AddAssetScreen = ({ navigation, route }) => {
     }
   }, []);
 
-  const handleAdd = () => {
+  const handleAdd = async () => {
     if (!ticker || !buyPrice || !buyDate) return;
+
+    if (!user) {
+      navigation.navigate('ProfileScreen', {
+        redirectTo: 'AddAssetScreen',
+        redirectParams: { ticker },
+      });
+      return;
+    }
+
+    try {
+      await ApiService.addFavorite(ticker);
+    } catch (e) {
+      console.warn('Could not save favorite:', e.message || e);
+    }
 
     addAsset({
       ticker,

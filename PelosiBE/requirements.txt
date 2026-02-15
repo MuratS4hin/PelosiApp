@@ -7,3 +7,5 @@ apscheduler
 yfinance
 python-dotenv
 psycopg2-binary
+PyJWT
+bcrypt

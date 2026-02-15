@@ -7,10 +7,30 @@ const useAppStore = create(
     (set) => ({
       tempData: {},
       myAssets: [],
+      user: null,
+      token: null,
+
+      setAuth: ({ user, token }) =>
+        set(() => ({
+          user,
+          token,
+        })),
+
+      logout: () =>
+        set(() => ({
+          user: null,
+          token: null,
+          myAssets: [],
+        })),
 
       setTempData: (data) =>
         set((state) => ({
           tempData: { ...state.tempData, ...data },
+        })),
+
+      setMyAssets: (assets) =>
+        set(() => ({
+          myAssets: assets || [],
         })),
 
       addAsset: (asset) =>

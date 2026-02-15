@@ -24,6 +24,7 @@ const StockDetailScreen = ({ route, navigation }) => {
   const [recLoading, setRecLoading] = useState(false);
   const [selectedTx, setSelectedTx] = useState(null);
   const [showTxModal, setShowTxModal] = useState(false);
+  const user = UseAppStore((state) => state.user);
   const myAssets = UseAppStore((state) => state.myAssets);
   const removeAsset = UseAppStore((state) => state.removeAsset);
   const isAssetAdded = myAssets.some(asset => asset.ticker === ticker);
@@ -36,11 +37,25 @@ const StockDetailScreen = ({ route, navigation }) => {
         `Do you want to remove ${ticker} from your list?`,
         [
           { text: 'No', onPress: () => {}, style: 'cancel' },
-          { text: 'Yes', onPress: () => removeAsset(ticker), style: 'destructive' }
+          { text: 'Yes', onPress: async () => {
+              try {
+                await ApiService.removeFavorite(ticker);
+              } catch (e) {
+                console.warn('Could not remove favorite:', e.message || e);
+              }
+              removeAsset(ticker);
+            }, style: 'destructive' }
         ]
       );
     } else {
       // Add to list
+      if (!user) {
+        navigation.navigate('ProfileScreen', {
+          redirectTo: 'AddAssetScreen',
+          redirectParams: { ticker },
+        });
+        return;
+      }
       navigation.navigate('AddAssetScreen', { ticker: ticker });
     }
   };

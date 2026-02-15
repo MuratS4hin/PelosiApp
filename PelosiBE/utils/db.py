@@ -75,6 +75,27 @@ def init_db():
     );
     """)
 
+    # Table 5: Users
+    cur.execute("""
+    CREATE TABLE IF NOT EXISTS users (
+        id SERIAL PRIMARY KEY,
+        email VARCHAR(255) UNIQUE NOT NULL,
+        password_hash TEXT NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+    """)
+
+    # Table 6: Favorite stocks (user-scoped)
+    cur.execute("""
+    CREATE TABLE IF NOT EXISTS favorite_stocks (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+        ticker VARCHAR(20) NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(user_id, ticker)
+    );
+    """)
+
     conn.commit()
     cur.close()
     connection_pool.putconn(conn)

@@ -4,11 +4,15 @@ import HomeScreen from '../screens/HomeScreen';
 import MyAssetsScreen from '../screens/MyAssetsScreen';
 import AddAssetScreen from '../screens/AddAssetScreen';
 import StockDetailScreen from '../screens/StockDetailScreen';
+import ProfileScreen from '../screens/ProfileScreen';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
+import UseAppStore from '../store/UseAppStore';
 
 const Stack = createNativeStackNavigator();
 
 export default function AppNavigator() {
+  const user = UseAppStore((s) => s.user);
+
   return (
     <Stack.Navigator>
       <Stack.Screen
@@ -19,7 +23,7 @@ export default function AppNavigator() {
           headerRight: () => (
             <TouchableOpacity
               style={{ marginRight: 10 }}
-              onPress={() => navigation.navigate('MyAssetsScreen')}
+              onPress={() => navigation.navigate('ProfileScreen')}
             >
               <Image
                 source={{ uri: 'https://cdn-icons-png.flaticon.com/512/3135/3135715.png' }}
@@ -52,6 +56,14 @@ export default function AppNavigator() {
         component={AddAssetScreen}
         options={{
           title: 'Add New Asset',
+        }}
+      />
+
+      <Stack.Screen
+        name="ProfileScreen"
+        component={ProfileScreen}
+        options={{
+          title: 'Profile',
         }}
       />
 

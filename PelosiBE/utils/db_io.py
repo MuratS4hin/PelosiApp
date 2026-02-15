@@ -1,6 +1,7 @@
 import json
 import logging
 from datetime import datetime
+import psycopg2
 from psycopg2.extras import Json 
 from .db import get_db_connection, release_db_connection
 
@@ -81,6 +82,127 @@ def load_existing_data():
             """)
             rows = cur.fetchall()
             return rows
+    finally:
+        release_db_connection(conn)
+
+
+def create_user(email: str, password_hash: str):
+    conn = get_db_connection()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                INSERT INTO users (email, password_hash)
+                VALUES (%s, %s)
+                RETURNING id, email, created_at;
+                """,
+                (email.lower(), password_hash),
+            )
+            row = cur.fetchone()
+            conn.commit()
+            return {"id": row[0], "email": row[1], "created_at": row[2]}
+    except psycopg2.errors.UniqueViolation:
+        conn.rollback()
+        return None
+    finally:
+        release_db_connection(conn)
+
+
+def get_user_by_email(email: str):
+    conn = get_db_connection()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT id, email, password_hash, created_at
+                FROM users
+                WHERE email = %s;
+                """,
+                (email.lower(),),
+            )
+            row = cur.fetchone()
+            if not row:
+                return None
+            return {"id": row[0], "email": row[1], "password_hash": row[2], "created_at": row[3]}
+    finally:
+        release_db_connection(conn)
+
+
+def get_user_by_id(user_id: int):
+    conn = get_db_connection()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT id, email, created_at
+                FROM users
+                WHERE id = %s;
+                """,
+                (user_id,),
+            )
+            row = cur.fetchone()
+            if not row:
+                return None
+            return {"id": row[0], "email": row[1], "created_at": row[2]}
+    finally:
+        release_db_connection(conn)
+
+
+def add_favorite_stock(user_id: int, ticker: str):
+    conn = get_db_connection()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                INSERT INTO favorite_stocks (user_id, ticker)
+                VALUES (%s, %s)
+                ON CONFLICT (user_id, ticker) DO NOTHING
+                RETURNING id, user_id, ticker, created_at;
+                """,
+                (user_id, ticker.upper()),
+            )
+            row = cur.fetchone()
+            conn.commit()
+            if not row:
+                return None
+            return {"id": row[0], "user_id": row[1], "ticker": row[2], "created_at": row[3]}
+    finally:
+        release_db_connection(conn)
+
+
+def list_favorite_stocks(user_id: int):
+    conn = get_db_connection()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT ticker, created_at
+                FROM favorite_stocks
+                WHERE user_id = %s
+                ORDER BY created_at DESC;
+                """,
+                (user_id,),
+            )
+            rows = cur.fetchall()
+            return [{"ticker": r[0], "created_at": r[1]} for r in rows]
+    finally:
+        release_db_connection(conn)
+
+
+def remove_favorite_stock(user_id: int, ticker: str) -> bool:
+    conn = get_db_connection()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                DELETE FROM favorite_stocks
+                WHERE user_id = %s AND ticker = %s;
+                """,
+                (user_id, ticker.upper()),
+            )
+            deleted = cur.rowcount > 0
+            conn.commit()
+            return deleted
     finally:
         release_db_connection(conn)
 

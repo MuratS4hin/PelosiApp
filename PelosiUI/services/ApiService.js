@@ -64,6 +64,34 @@ export default class ApiService {
     return this.request(endpoint, 'DELETE');
   }
 
+  //_______________________Auth operations__________________________
+
+  static async register(email, password) {
+    return this.request('auth/register', 'POST', { email, password });
+  }
+
+  static async login(email, password) {
+    return this.request('auth/login', 'POST', { email, password });
+  }
+
+  static async getMe() {
+    return this.request('me', 'GET');
+  }
+
+  //_______________________Favorites operations__________________________
+
+  static async listFavorites() {
+    return this.request('favorites', 'GET');
+  }
+
+  static async addFavorite(ticker) {
+    return this.request('favorites', 'POST', { ticker });
+  }
+
+  static async removeFavorite(ticker) {
+    return this.request(`favorites/${encodeURIComponent(ticker)}`, 'DELETE');
+  }
+
   //_______________________Finnhub operations__________________________
   
   // Get stock recommendation trends (proxy via backend)

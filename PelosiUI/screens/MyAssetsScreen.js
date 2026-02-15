@@ -18,8 +18,31 @@ const MyAssetsScreen = () => {
   const navigation = useNavigation();
   const myAssets = UseAppStore((s) => s.myAssets);
   const removeAsset = UseAppStore((s) => s.removeAsset); // 🔥 delete function
+  const setMyAssets = UseAppStore((s) => s.setMyAssets);
+  const user = UseAppStore((s) => s.user);
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+
+  useEffect(() => {
+    const loadFavorites = async () => {
+      if (!user) return;
+      try {
+        setLoading(true);
+        const favorites = await ApiService.listFavorites();
+        const mapped = (favorites || []).map((f) => ({
+          ticker: f.ticker,
+          addedDate: f.created_at,
+          id: `${f.ticker}-${f.created_at}`,
+        }));
+        setMyAssets(mapped);
+      } catch (e) {
+        console.warn('Could not load favorites:', e.message || e);
+      } finally {
+        setLoading(false);
+      }
+    };
+    loadFavorites();
+  }, [user, setMyAssets]);
 
   const confirmDelete = (ticker) => {
     Alert.alert(
@@ -27,7 +50,14 @@ const MyAssetsScreen = () => {
       `Do you want to remove ${ticker} from your list?`,
       [
         { text: 'No', onPress: () => {}, style: 'cancel' },
-        { text: 'Yes', onPress: () => removeAsset(ticker), style: 'destructive' }
+        { text: 'Yes', onPress: async () => {
+            try {
+              await ApiService.removeFavorite(ticker);
+            } catch (e) {
+              console.warn('Could not remove favorite:', e.message || e);
+            }
+            removeAsset(ticker);
+          }, style: 'destructive' }
       ]
     );
   };
@@ -70,16 +100,22 @@ const MyAssetsScreen = () => {
           }
         >
           <Text style={styles.ticker}>{companyName} ({ticker})</Text>
-          <Text style={styles.details}>{action} — {amount}</Text>
-          <Text style={styles.details}>By {person}</Text>
-          <Text style={styles.details}>Transaction: {transactionDate}</Text>
-          <Text style={styles.details}>Reported: {reportedDate}</Text>
-          <Text style={styles.details}>
-            Change: {change} | Stock: {percentChange}%
-          </Text>
+          {action && amount ? (
+            <>
+              <Text style={styles.details}>{action} — {amount}</Text>
+              <Text style={styles.details}>By {person}</Text>
+              <Text style={styles.details}>Transaction: {transactionDate}</Text>
+              <Text style={styles.details}>Reported: {reportedDate}</Text>
+              <Text style={styles.details}>
+                Change: {change} | Stock: {percentChange}%
+              </Text>
 
-          {comment && comment !== "-" && (
-            <Text style={styles.comment}>Note: {comment}</Text>
+              {comment && comment !== "-" && (
+                <Text style={styles.comment}>Note: {comment}</Text>
+              )}
+            </>
+          ) : (
+            <Text style={styles.details}>Added: {addedDate ? new Date(addedDate).toLocaleDateString() : '-'}</Text>
           )}
         </TouchableOpacity>
 
@@ -105,7 +141,15 @@ const MyAssetsScreen = () => {
   if (!myAssets.length) {
     return (
       <View style={styles.centered}>
-        <Text>No assets added yet.</Text>
+        <Text>{user ? 'No assets added yet.' : 'Please log in to see your favorites.'}</Text>
+        {!user && (
+          <TouchableOpacity
+            style={styles.loginButton}
+            onPress={() => navigation.navigate('ProfileScreen')}
+          >
+            <Text style={styles.loginButtonText}>Go to Profile</Text>
+          </TouchableOpacity>
+        )}
       </View>
     );
   }
@@ -173,4 +217,12 @@ const styles = StyleSheet.create({
     fontStyle: "italic",
     color: "#555",
   },
+  loginButton: {
+    marginTop: 12,
+    backgroundColor: '#007AFF',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 8,
+  },
+  loginButtonText: { color: '#fff', fontWeight: '600' },
 });
