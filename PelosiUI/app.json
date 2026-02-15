@@ -2,6 +2,8 @@
   "expo": {
     "name": "pelosiapp",
     "slug": "pelosiapp",
+    "owner": "mur4t_s4hin",
+    "scheme": "pelosiapp",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -14,7 +16,7 @@
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "pelosiapp",
+      "bundleIdentifier": "com.mur4t.s4hin.pelosiapp",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false
       }
@@ -24,7 +26,8 @@
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"
       },
-      "edgeToEdgeEnabled": true
+      "edgeToEdgeEnabled": true,
+      "package": "com.mur4t_s4hin.pelosiapp"
     },
     "web": {
       "favicon": "./assets/favicon.png"
