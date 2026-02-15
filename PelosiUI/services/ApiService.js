@@ -18,6 +18,7 @@ export default class ApiService {
     
     const headers = {
       'Content-Type': 'application/json',
+      'Accept': 'application/json',
     };
 
     if (this.token) {
@@ -35,7 +36,18 @@ export default class ApiService {
 
     try {
       const response = await fetch(urlWithPassword, config);
-      const data = await response.json();
+      const contentType = response.headers.get('content-type') || '';
+
+      let data;
+      if (contentType.includes('application/json')) {
+        data = await response.json();
+      } else {
+        const text = await response.text();
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status} ${response.statusText}: ${text}`);
+        }
+        throw new Error(`Unexpected content-type: ${contentType}. Body: ${text}`);
+      }
 
       if (!response.ok) {
         throw new Error(data.detail || data.message || 'Request failed');

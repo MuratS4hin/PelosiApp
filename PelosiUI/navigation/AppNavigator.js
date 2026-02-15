@@ -19,7 +19,7 @@ export default function AppNavigator() {
         name="Home"
         component={HomeScreen}
         options={({ navigation }) => ({
-          title: 'Pellosi App',
+          title: 'Portrace',
           headerRight: () => (
             <TouchableOpacity
               style={{ marginRight: 10 }}

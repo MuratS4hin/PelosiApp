@@ -4,7 +4,7 @@
     "slug": "pelosiapp",
     "owner": "mur4t_s4hin",
     "scheme": "pelosiapp",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
