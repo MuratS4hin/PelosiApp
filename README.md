@@ -244,4 +244,5 @@ The `PelosiBE` service exposes the following endpoints. All endpoints require th
 > [!WARNING]
 > **Security Note:** Never commit your `.env` files to version control. Ensure they are listed in your `.gitignore` to prevent leaking sensitive credentials.
 
+> raspberry_pi incomming power command: vcgencmd pmic_read_adc | awk -F'[=A V]' '/current/ {c[$1]=$2} /volt/ {v[substr($1,1,length($1)-2)]=$2} END {for (i in c) {p=c[i]*v[i]; sum+=p; printf "%-15s %.3f W\n", i, p} print "-----------------------"; printf "Estimated Total: %.3f W\n", sum}'
 
