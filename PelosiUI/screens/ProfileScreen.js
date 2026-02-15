@@ -4,7 +4,7 @@ import { View, Text, StyleSheet, TextInput, TouchableOpacity, Alert, FlatList } 
 import ApiService from '../services/ApiService';
 import UseAppStore from '../store/UseAppStore';
 
-export default function ProfileScreen({ navigation, route }) {
+export default function ProfileScreen({ navigation, route, activeTabInfo='favorites' }) {
   const { redirectTo, redirectParams } = route.params || {};
   const user = UseAppStore((s) => s.user);
   const token = UseAppStore((s) => s.token);
@@ -12,7 +12,7 @@ export default function ProfileScreen({ navigation, route }) {
   const logout = UseAppStore((s) => s.logout);
   const setMyAssets = UseAppStore((s) => s.setMyAssets);
 
-  const [activeTab, setActiveTab] = useState('favorites');
+  const [activeTab, setActiveTab] = useState(route.params?.activeTabInfo || 'favorites');
   const [isLogin, setIsLogin] = useState(true);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');

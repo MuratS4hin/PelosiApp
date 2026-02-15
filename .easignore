@@ -1,4 +1,9 @@
 PelosiUI/node_modules
+PelosiUI/ios/Pods
+PelosiUI/ios/Pods.xcodeproj
+PelosiUI/ios/build
+PelosiUI/android/.gradle
+PelosiUI/android/app/build
 PelosiBE/venv
 .DS_Store
 PelosiBE/db/congresstrades_grouped.json
@@ -12,3 +17,7 @@ PelosiBE/db/congresspeople.json
 PelosiBE/db/tickers.json
 PelosiBE/.env
 PelosiDB/.env
+PelosiBE/
+PelosiDB/
+appstore/
+.git/

@@ -52,6 +52,50 @@ const formatDateDDMMYYYY = (d) => {
   return `${day}.${month}.${year}`;
 };
 
+const buildGroupedByDate = (rawData, selectedCongressman, dateFilterDays) => {
+  if (!dateFilterDays) return [];
+  const filtered = selectedCongressman === ALL_CONGRESSMAN
+    ? rawData
+    : rawData.filter((item) => item[1] === selectedCongressman);
+
+  const cutoffDate = (() => {
+    const d = new Date();
+    d.setDate(d.getDate() - dateFilterDays);
+    d.setHours(0, 0, 0, 0);
+    return d;
+  })();
+
+  const groups = filtered.reduce((acc, item) => {
+    const parsedDate = parseTxDate(item[2]);
+    if (!parsedDate || parsedDate < cutoffDate) return acc;
+    const dateKey = formatDateDDMMYYYY(parsedDate);
+    if (!acc[dateKey]) {
+      acc[dateKey] = {
+        dateKey,
+        date: parsedDate,
+        transactions: [],
+      };
+    }
+    acc[dateKey].transactions.push({
+      name: item[1],
+      ticker: item[0],
+      companyName: item[4] || '',
+      type: item[3] || '',
+    });
+    return acc;
+  }, {});
+
+  const values = Object.values(groups).sort((a, b) => b.date.getTime() - a.date.getTime());
+  values.forEach((group) => {
+    group.transactions.sort((a, b) => {
+      const nameCompare = (a.name || '').localeCompare(b.name || '');
+      if (nameCompare !== 0) return nameCompare;
+      return (a.ticker || '').localeCompare(b.ticker || '');
+    });
+  });
+  return values;
+};
+
 const buildGroupedStocks = (rawData, selectedCongressman, dateFilterDays) => {
   const filtered = selectedCongressman === ALL_CONGRESSMAN
     ? rawData
@@ -105,11 +149,8 @@ const buildGroupedStocks = (rawData, selectedCongressman, dateFilterDays) => {
   return sortedArray;
 };
 
-const getUniqueTickers = (rawData, selectedCongressman) => {
-  const filtered = selectedCongressman === ALL_CONGRESSMAN
-    ? rawData
-    : rawData.filter((item) => item[1] === selectedCongressman);
-  const tickers = new Set(filtered.map((item) => item[0]).filter(Boolean));
+const getUniqueTickers = (rawData) => {
+  const tickers = new Set((rawData || []).map((item) => item[0]).filter(Boolean));
   return Array.from(tickers).sort();
 };
 
@@ -166,10 +207,15 @@ const HomeScreen = ({ navigation }) => {
     [rawData, selectedCongressman, dateFilterDays]
   );
 
+  const groupedByDate = useMemo(
+    () => buildGroupedByDate(rawData, selectedCongressman, dateFilterDays),
+    [rawData, selectedCongressman, dateFilterDays]
+  );
+
   // Get unique tickers (for ticker list tab)
   const uniqueTickers = useMemo(
-    () => getUniqueTickers(rawData, selectedCongressman),
-    [rawData, selectedCongressman]
+    () => getUniqueTickers(rawData),
+    [rawData]
   );
 
   const filteredTickers = useMemo(() => {
@@ -259,6 +305,36 @@ const HomeScreen = ({ navigation }) => {
       </View>
     );
   }, [expandedTicker, handleToggleExpand, navigation]);
+
+  const renderDateGroupItem = useCallback(({ item }) => (
+    <View style={styles.card}>
+      <View style={styles.cardHeader}>
+        <Text style={styles.dateGroupTitle}>{item.dateKey}</Text>
+        <Text style={styles.tradeCount}>{item.transactions.length} trade{item.transactions.length > 1 ? 's' : ''}</Text>
+      </View>
+      <View style={styles.dropdownContent}>
+        {item.transactions.map((tx, index) => (
+          <View key={`${item.dateKey}-${tx.ticker}-${index}`} style={styles.txRow}>
+            <Text style={styles.txTicker}>{tx.ticker}</Text>
+            <View style={styles.txInfo}>
+              <Text style={styles.txName}>{tx.name}</Text>
+              <Text style={styles.txDate}>{tx.ticker}{tx.companyName ? ` (${tx.companyName})` : ''}</Text>
+            </View>
+            <Text
+              style={[
+                styles.txBadge,
+                tx.type.toLowerCase().includes('purchase')
+                  ? styles.buyBadge
+                  : styles.sellBadge,
+              ]}
+            >
+              {tx.type.toUpperCase()}
+            </Text>
+          </View>
+        ))}
+      </View>
+    </View>
+  ), []);
 
   if (loading) {
     return (
@@ -356,9 +432,9 @@ const HomeScreen = ({ navigation }) => {
           </Modal>
 
           <FlatList
-            data={groupedStocks}
-            keyExtractor={(item) => item.ticker}
-            renderItem={renderItem}
+            data={dateFilterDays ? groupedByDate : groupedStocks}
+            keyExtractor={(item) => (dateFilterDays ? item.dateKey : item.ticker)}
+            renderItem={dateFilterDays ? renderDateGroupItem : renderItem}
             onRefresh={handleRefresh}
             refreshing={isRefreshing}
             contentContainerStyle={{ paddingVertical: 10, paddingBottom: 80 }}
@@ -598,6 +674,7 @@ const styles = StyleSheet.create({
   ticker: { fontSize: 16, fontWeight: '900', color: '#1C1C1E' },
   companyName: { fontSize: 11, fontWeight: '500', color: '#8E8E93', marginTop: 2},
   tradeCount: { color: '#007AFF', fontWeight: '600', fontSize: 14 },
+  dateGroupTitle: { fontSize: 16, fontWeight: '800', color: '#1C1C1E' },
   dropdownContent: {
     paddingHorizontal: 16,
     paddingBottom: 12,
@@ -611,6 +688,13 @@ const styles = StyleSheet.create({
     paddingVertical: 10, 
     borderBottomWidth: 0.5, 
     borderBottomColor: '#E5E5EA' 
+  },
+  txTicker: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#1C1C1E',
+    marginRight: 10,
+    minWidth: 48,
   },
   txInfo: { flex: 1 },
   txName: { fontSize: 15, fontWeight: '700', color: '#3A3A3C' },

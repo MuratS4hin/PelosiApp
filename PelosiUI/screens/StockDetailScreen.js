@@ -53,6 +53,7 @@ const StockDetailScreen = ({ route, navigation }) => {
         navigation.navigate('ProfileScreen', {
           redirectTo: 'AddAssetScreen',
           redirectParams: { ticker },
+          activeTabInfo: 'account'
         });
         return;
       }
