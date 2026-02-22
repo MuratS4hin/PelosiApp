@@ -5,6 +5,8 @@ import MyAssetsScreen from '../screens/MyAssetsScreen';
 import AddAssetScreen from '../screens/AddAssetScreen';
 import StockDetailScreen from '../screens/StockDetailScreen';
 import ProfileScreen from '../screens/ProfileScreen';
+import ForgotPasswordScreen from '../screens/ForgotPasswordScreen';
+import ResetPasswordScreen from '../screens/ResetPasswordScreen';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import UseAppStore from '../store/UseAppStore';
 
@@ -72,6 +74,24 @@ export default function AppNavigator() {
         component={StockDetailScreen}
         options={{
           title: 'Stock Detail',
+        }}
+      />
+
+      <Stack.Screen
+        name="ForgotPassword"
+        component={ForgotPasswordScreen}
+        options={{
+          title: 'Forgot Password',
+          headerBackTitle: 'Back',
+        }}
+      />
+
+      <Stack.Screen
+        name="ResetPassword"
+        component={ResetPasswordScreen}
+        options={{
+          title: 'Reset Password',
+          headerBackTitle: 'Back',
         }}
       />
     </Stack.Navigator>

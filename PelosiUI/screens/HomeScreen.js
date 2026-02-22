@@ -173,24 +173,36 @@ const HomeScreen = ({ navigation }) => {
     else setLoading(true);
     setError(null);
 
-    try {
-      const [data, congressmen] = await Promise.all([
-        ApiService.get('congresstrades/load_existing_data'),
-        ApiService.get('congresstrades/congresspeople'),
-      ]);
+    const maxAttempts = 3; // initial try + 2 retries
+    let lastError = null;
 
-      if (!isMountedRef.current) return;
+    for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+      try {
+        const [data, congressmen] = await Promise.all([
+          ApiService.get('congresstrades/load_existing_data'),
+          ApiService.get('congresstrades/congresspeople'),
+        ]);
 
-      setRawData(Array.isArray(data) ? data : []);
-      setCongressmenList(normalizeCongressmen(congressmen));
-    } catch (err) {
-      console.error('Fetch error:', err);
-      if (isMountedRef.current) setError('Failed to load data. Please try again.');
-    } finally {
-      if (!isMountedRef.current) return;
-      setLoading(false);
-      setIsRefreshing(false);
+        if (!isMountedRef.current) return;
+
+        setRawData(Array.isArray(data) ? data : []);
+        setCongressmenList(normalizeCongressmen(congressmen));
+        lastError = null;
+        break;
+      } catch (err) {
+        lastError = err;
+        console.error('Fetch error:', err);
+        if (!isMountedRef.current) return;
+      }
     }
+
+    if (lastError && isMountedRef.current) {
+      setError('Failed to load data. Please try again.');
+    }
+
+    if (!isMountedRef.current) return;
+    setLoading(false);
+    setIsRefreshing(false);
   }, []);
 
   useEffect(() => {

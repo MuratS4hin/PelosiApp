@@ -18,8 +18,8 @@ const AddAssetScreen = ({ navigation, route }) => {
   const [tickerList, setTickerList] = useState([]);
   const [showDropdown, setShowDropdown] = useState(false);
   const [ticker, setTicker] = useState(route.params?.ticker || '');
-  const [buyPrice, setBuyPrice] = useState('');
-  const [buyDate, setBuyDate] = useState('');
+  const [buyPrice, setBuyPrice] = useState(route.params?.buyPrice ? String(route.params.buyPrice) : '');
+  const [buyDate, setBuyDate] = useState(route.params?.endDate || '');
 
   const fetchTickerList = async () => {
     try {
@@ -30,26 +30,8 @@ const AddAssetScreen = ({ navigation, route }) => {
     }
   };
 
-  const fetchTickerData = async (ticker) => {
-    try {
-      const now = new Date();
-      const oneYearAgo = new Date(now.getFullYear(), now.getMonth(), now.getDate()-1);
-      const defaultStartDate = oneYearAgo.toISOString().split('T')[0];
-      const defaultEndDate = now.toISOString().split('T')[0];
-      const res = await ApiService.get(`stocks/${ticker}?start=${defaultStartDate}&end=${defaultEndDate}`);
-      setBuyPrice(res.last_price.toString());
-      setBuyDate(defaultEndDate);
-    } catch (err) {
-      console.error("Error fetching asset data:", err);
-      return null;
-    }
-  }
-
   useEffect(() => {
     fetchTickerList();
-    if(ticker) {
-      fetchTickerData(ticker);
-    }
   }, []);
 
   const handleAdd = async () => {

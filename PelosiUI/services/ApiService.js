@@ -90,6 +90,22 @@ export default class ApiService {
     return this.request('me', 'GET');
   }
 
+  static async deleteAccount() {
+    return this.request('auth/account', 'DELETE');
+  }
+
+  static async requestPasswordReset(email) {
+    return this.request('auth/request-password-reset', 'POST', { email });
+  }
+
+  static async verifyResetCode(code) {
+    return this.request('auth/verify-reset-code', 'POST', { code });
+  }
+
+  static async resetPassword(token, newPassword) {
+    return this.request('auth/reset-password', 'POST', { token, new_password: newPassword });
+  }
+
   //_______________________Favorites operations__________________________
 
   static async listFavorites() {

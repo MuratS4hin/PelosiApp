@@ -30,6 +30,10 @@ const StockDetailScreen = ({ route, navigation }) => {
   const isAssetAdded = myAssets.some(asset => asset.ticker === ticker);
 
   const handleStarPress = () => {
+    if (loading || !stockData) {
+      Alert.alert('Please wait', 'Stock data is still loading. Try again in a moment.');
+      return;
+    }
     if (isAssetAdded) {
       // Ask for confirmation to remove
       Alert.alert(
@@ -57,7 +61,10 @@ const StockDetailScreen = ({ route, navigation }) => {
         });
         return;
       }
-      navigation.navigate('AddAssetScreen', { ticker: ticker });
+      // Use last chart close if available, otherwise last_price, otherwise first_price
+      const chartCloses = (stockData?.chart || []).map(p => Number(p.close)).filter(v => !isNaN(v));
+      const lastPrice = chartCloses.length > 0 ? chartCloses[chartCloses.length - 1] : (stockData?.last_price || stockData?.first_price);
+      navigation.navigate('AddAssetScreen', { ticker, endDate: defaultEndDate, buyPrice: lastPrice });
     }
   };
 
@@ -139,16 +146,17 @@ const StockDetailScreen = ({ route, navigation }) => {
         <TouchableOpacity
           style={{ marginRight: 10 }}
           onPress={handleStarPress}
+          disabled={loading || !stockData}
         >
           <Icon 
             name={isAssetAdded ? "star" : "star-outline"} 
             size={28} 
-            color="#FFD700" 
+            color={(loading || !stockData) ? "#C7C7CC" : "#FFD700"} 
           />
         </TouchableOpacity>
       ),
     });
-  }, [isAssetAdded, ticker, navigation]);
+  }, [isAssetAdded, ticker, navigation, loading, stockData]);
 
   if (loading) {
     return <ActivityIndicator size="large" style={{ marginTop: 50 }} />;

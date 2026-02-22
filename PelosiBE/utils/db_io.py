@@ -1,9 +1,18 @@
 import json
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta
 import psycopg2
 from psycopg2.extras import Json 
 from .db import get_db_connection, release_db_connection
+import smtplib
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
+from email.utils import formataddr
+import secrets
+import os
+from dotenv import load_dotenv
+
+load_dotenv()
 
 def parse_date(date_str):
     try:
@@ -205,6 +214,179 @@ def remove_favorite_stock(user_id: int, ticker: str) -> bool:
             return deleted
     finally:
         release_db_connection(conn)
+
+
+def delete_user(user_id: int) -> bool:
+    """Delete a user and all their associated data (favorites)."""
+    conn = get_db_connection()
+    try:
+        with conn.cursor() as cur:
+            # First delete all favorites (due to foreign key constraint)
+            cur.execute(
+                "DELETE FROM favorite_stocks WHERE user_id = %s;",
+                (user_id,),
+            )
+            # Then delete the user
+            cur.execute(
+                "DELETE FROM users WHERE id = %s;",
+                (user_id,),
+            )
+            deleted = cur.rowcount > 0
+            conn.commit()
+            return deleted
+    finally:
+        release_db_connection(conn)
+
+def request_password_reset(email: str) -> bool:
+    """Generate a password reset token and send an email to the user."""
+    user = get_user_by_email(email)
+    if not user:
+        # For security, we don't reveal if email exists
+        return True
+    
+    token = generate_reset_token()
+    expiration = datetime.now() + timedelta(minutes=10)
+    
+    if not add_password_reset_token(user["id"], token, expiration):
+        return False
+    
+    if not send_password_reset_email(user["email"], token):
+        return False
+    
+    return True
+
+
+def add_password_reset_token(user_id: int, token: str, expiration: datetime) -> bool:
+    """Store the password reset token in the database for the user."""
+    conn = get_db_connection()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                UPDATE users
+                SET reset_token = %s, reset_token_expiration = %s
+                WHERE id = %s;
+                """,
+                (token, expiration, user_id),
+            )
+            conn.commit()
+            return cur.rowcount > 0
+    except Exception as e:
+        conn.rollback()
+        logging.error(f"Error storing reset token: {e}")
+        return False
+    finally:
+        release_db_connection(conn)
+
+
+def verify_reset_token(token: str) -> dict:
+    """Verify if the reset token is valid and return the user."""
+    conn = get_db_connection()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT id, email, reset_token_expiration
+                FROM users
+                WHERE reset_token = %s;
+                """,
+                (token,),
+            )
+            row = cur.fetchone()
+            if not row:
+                return None
+            
+            user_id, email, expiration = row[0], row[1], row[2]
+            
+            # Check if token has expired
+            if expiration < datetime.now():
+                return None
+            
+            return {"id": user_id, "email": email}
+    finally:
+        release_db_connection(conn)
+
+
+def reset_password(token: str, new_password_hash: str) -> bool:
+    """Reset the user's password and clear the reset token."""
+    user = verify_reset_token(token)
+    if not user:
+        return False
+    
+    conn = get_db_connection()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                UPDATE users
+                SET password_hash = %s, reset_token = NULL, reset_token_expiration = NULL
+                WHERE id = %s;
+                """,
+                (new_password_hash, user["id"]),
+            )
+            conn.commit()
+            return cur.rowcount > 0
+    except Exception as e:
+        conn.rollback()
+        logging.error(f"Error resetting password: {e}")
+        return False
+    finally:
+        release_db_connection(conn)
+
+
+def send_password_reset_email(email: str, code: str) -> bool:
+    """Send a password reset email to the user using SMTP with a 6-digit code."""
+    try:
+        smtp_server = os.getenv("SMTP_SERVER", "smtp.gmail.com")
+        smtp_port = int(os.getenv("SMTP_PORT", "587"))
+        sender_email = os.getenv("SENDER_EMAIL") 
+        gmail_auth_email = os.getenv("GMAIL_AUTH_EMAIL") 
+        sender_password = os.getenv("SENDER_PASSWORD") 
+        
+        if not sender_email or not sender_password or not gmail_auth_email:
+            logging.error("Email credentials not configured")
+            return False
+        
+        subject = "Password Reset Code - Portrace App"
+        body = f"""
+        Hello,
+
+        You have requested to reset your password for your Portrace App account. 
+        If you did not make this request, please ignore this email.
+
+        Your password reset code is:
+        {code}
+
+        Enter this code in the Portrace App to proceed with resetting your password.
+        This code will expire in 10 minutes.
+
+        Best regards,
+        Portrace App Team
+        """
+        
+        msg = MIMEMultipart()
+        msg["From"] = formataddr(("Portrace App Team", sender_email)) 
+        msg["To"] = email
+        msg["Subject"] = subject
+        msg.attach(MIMEText(body, "plain"))
+        
+        with smtplib.SMTP(smtp_server, smtp_port) as server:
+            server.starttls()
+            server.set_debuglevel(1)
+            server.login(gmail_auth_email, sender_password)
+            server.send_message(msg)
+        
+        logging.info(f"Password reset code email sent to {email}")
+        return True
+    except Exception as e:
+        logging.error(f"Error sending password reset email: {e}")
+        return False
+
+
+def generate_reset_token() -> str:
+    """Generate a 6-digit code for password reset."""
+    import random
+    return str(random.randint(100000, 999999))
 
 
 

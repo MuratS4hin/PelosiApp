@@ -96,6 +96,13 @@ def init_db():
     );
     """)
 
+    # Add password reset columns to users table if they don't exist
+    cur.execute("""
+    ALTER TABLE users
+    ADD COLUMN IF NOT EXISTS reset_token VARCHAR(255),
+    ADD COLUMN IF NOT EXISTS reset_token_expiration TIMESTAMP;
+    """)
+
     conn.commit()
     cur.close()
     connection_pool.putconn(conn)

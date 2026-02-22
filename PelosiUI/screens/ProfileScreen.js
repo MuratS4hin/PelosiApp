@@ -47,6 +47,36 @@ export default function ProfileScreen({ navigation, route, activeTabInfo='favori
     logout();
   };
 
+  const handleDeleteAccount = () => {
+    Alert.alert(
+      'Delete Account',
+      'Are you sure you want to delete your account? This action cannot be undone and will remove all your data including favorites.',
+      [
+        {
+          text: 'Cancel',
+          style: 'cancel',
+        },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              setLoading(true);
+              await ApiService.deleteAccount();
+              ApiService.setToken(null);
+              logout();
+              Alert.alert('Success', 'Your account has been deleted.');
+            } catch (e) {
+              Alert.alert('Error', e.message || 'Failed to delete account. Please try again.');
+            } finally {
+              setLoading(false);
+            }
+          },
+        },
+      ]
+    );
+  };
+
   useEffect(() => {
     const loadFavorites = async () => {
       if (!user || !token || activeTab !== 'favorites') {
@@ -136,6 +166,15 @@ export default function ProfileScreen({ navigation, route, activeTabInfo='favori
           <TouchableOpacity style={styles.buttonSecondary} onPress={handleLogout}>
             <Text style={styles.buttonTextSecondary}>Log out</Text>
           </TouchableOpacity>
+          <TouchableOpacity 
+            style={styles.buttonDanger} 
+            onPress={handleDeleteAccount}
+            disabled={loading}
+          >
+            <Text style={styles.buttonTextDanger}>
+              {loading ? 'Deleting...' : 'Delete Account'}
+            </Text>
+          </TouchableOpacity>
         </View>
       ) : (
         <View style={styles.card}>
@@ -162,6 +201,14 @@ export default function ProfileScreen({ navigation, route, activeTabInfo='favori
           >
             <Text style={styles.buttonText}>{loading ? 'Please wait...' : (isLogin ? 'Log in' : 'Sign up')}</Text>
           </TouchableOpacity>
+          {isLogin && (
+            <TouchableOpacity
+              style={styles.link}
+              onPress={() => navigation.navigate('ForgotPassword')}
+            >
+              <Text style={styles.linkText}>Forgot Password?</Text>
+            </TouchableOpacity>
+          )}
           <TouchableOpacity
             style={styles.link}
             onPress={() => setIsLogin(!isLogin)}
@@ -205,6 +252,8 @@ const styles = StyleSheet.create({
   buttonText: { textAlign: 'center', color: '#fff', fontSize: 16 },
   buttonSecondary: { backgroundColor: '#F3F4F6', padding: 12, borderRadius: 8, marginTop: 12 },
   buttonTextSecondary: { textAlign: 'center', color: '#111827', fontSize: 16 },
+  buttonDanger: { backgroundColor: '#FEE2E2', padding: 12, borderRadius: 8, marginTop: 12 },
+  buttonTextDanger: { textAlign: 'center', color: '#DC2626', fontSize: 16, fontWeight: '600' },
   link: { marginTop: 12 },
   linkText: { color: '#007AFF', textAlign: 'center' },
 });

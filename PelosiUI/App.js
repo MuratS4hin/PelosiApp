@@ -4,6 +4,8 @@ import AppNavigator from './navigation/AppNavigator';
 import { ActivityIndicator, View } from 'react-native';
 import UseAppStore from './store/UseAppStore';
 import ApiService from './services/ApiService';
+import ForgotPasswordScreen from './screens/ForgotPasswordScreen';
+import ResetPasswordScreen from './screens/ResetPasswordScreen';
 
 export default function App() {
   const [loading, setLoading] = useState(true);

@@ -12,6 +12,10 @@ from utils.db_io import (
     add_favorite_stock,
     list_favorite_stocks,
     remove_favorite_stock,
+    delete_user,
+    request_password_reset,
+    verify_reset_token,
+    reset_password,
 )
 from services.stocks import get_stock_info, fetch_all_ticker_data, get_recommendation_trends, get_company_news  # Added fetch_all_ticker_data
 from utils.db import init_db
@@ -34,6 +38,19 @@ class AuthPayload(BaseModel):
 
 class FavoritePayload(BaseModel):
     ticker: str
+
+
+class PasswordResetRequestPayload(BaseModel):
+    email: EmailStr
+
+
+class PasswordResetPayload(BaseModel):
+    token: str
+    new_password: str
+
+
+class VerifyResetCodePayload(BaseModel):
+    code: str
 
 @app.on_event("startup")
 def startup_event():
@@ -138,6 +155,44 @@ def delete_favorite(ticker: str, user_id: int = Depends(get_current_user_id)):
     if not removed:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Favorite not found")
     return {"message": "Removed"}
+
+
+@app.delete("/auth/account")
+def delete_account(user_id: int = Depends(get_current_user_id)):
+    """Delete the authenticated user's account and all associated data."""
+    deleted = delete_user(user_id)
+    if not deleted:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+    return {"message": "Account deleted successfully"}
+
+
+@app.post("/auth/request-password-reset")
+def request_password_reset_endpoint(payload: PasswordResetRequestPayload):
+    """Send a password reset code to the user via email."""
+    success = request_password_reset(payload.email)
+    if not success:
+        # For security, don't reveal if email exists
+        pass
+    return {"message": "If an account exists with that email, a password reset code will be sent."}
+
+
+@app.post("/auth/verify-reset-code")
+def verify_reset_code_endpoint(payload: VerifyResetCodePayload):
+    """Verify the password reset code and return a temporary token."""
+    user = verify_reset_token(payload.code)
+    if not user:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid or expired reset code")
+    return {"message": "Code verified successfully", "user_id": user["id"]}
+
+
+@app.post("/auth/reset-password")
+def reset_password_endpoint(payload: PasswordResetPayload):
+    """Reset the user's password using a valid reset token."""
+    success = reset_password(payload.token, bcrypt.hashpw(payload.new_password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8"))
+    if not success:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid or expired reset token")
+    return {"message": "Password reset successfully"}
+
 
 if __name__ == "__main__":
     uvicorn.run("main:app", host="0.0.0.0", port=3000, reload=True)
