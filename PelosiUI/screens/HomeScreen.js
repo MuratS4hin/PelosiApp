@@ -9,9 +9,12 @@ import {
   Modal,
   ScrollView,
   TextInput,
+  useWindowDimensions,
 } from 'react-native';
-import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
+import { MaterialCommunityIcons as Icon } from '@expo/vector-icons';
 import ApiService from '../services/ApiService';
+import UseAppStore from '../store/UseAppStore';
+import { computeConfidenceScore, getScoreLabel } from '../utils/ConfidenceScore';
 
 const ALL_CONGRESSMAN = 'All';
 const DATE_FILTER_OPTIONS = [7, 30, 90];
@@ -96,10 +99,18 @@ const buildGroupedByDate = (rawData, selectedCongressman, dateFilterDays) => {
   return values;
 };
 
-const buildGroupedStocks = (rawData, selectedCongressman, dateFilterDays) => {
-  const filtered = selectedCongressman === ALL_CONGRESSMAN
+const buildGroupedStocks = (rawData, selectedCongressman, dateFilterDays, txTypeFilter = 'all', sortOrder = 'signal') => {
+  let filtered = selectedCongressman === ALL_CONGRESSMAN
     ? rawData
     : rawData.filter((item) => item[1] === selectedCongressman);
+
+
+  if (txTypeFilter !== 'all') {
+    filtered = filtered.filter((item) => {
+      const type = (item[3] || '').toString().toLowerCase();
+      return txTypeFilter === 'purchase' ? type.includes('purchase') : !type.includes('purchase');
+    });
+  }
 
   const cutoffDate = dateFilterDays ? (() => {
     const d = new Date();
@@ -136,7 +147,24 @@ const buildGroupedStocks = (rawData, selectedCongressman, dateFilterDays) => {
   const filteredValues = cutoffDate
     ? values.filter((group) => group.transactions.length > 0)
     : values;
-  const sortedArray = filteredValues.sort((a, b) => a.ticker.localeCompare(b.ticker));
+
+  // Compute Congress Signal Score for each stock
+  filteredValues.forEach((stock) => {
+    stock.confidence = computeConfidenceScore(stock.transactions);
+    stock.scoreInfo = getScoreLabel(stock.confidence);
+  });
+
+  // Sort based on sortOrder param
+  const sortedArray =
+    sortOrder === 'trades'
+      ? filteredValues.sort((a, b) => b.transactions.length - a.transactions.length)
+      : sortOrder === 'recent'
+        ? filteredValues.sort((a, b) => {
+            const latestA = Math.max(...a.transactions.filter((t) => t.date).map((t) => t.date.getTime()), 0);
+            const latestB = Math.max(...b.transactions.filter((t) => t.date).map((t) => t.date.getTime()), 0);
+            return latestB - latestA;
+          })
+        : filteredValues.sort((a, b) => b.confidence - a.confidence);
 
   sortedArray.forEach((stock) => {
     stock.transactions.sort((a, b) => {
@@ -166,6 +194,15 @@ const HomeScreen = ({ navigation }) => {
   const [dateFilterDays, setDateFilterDays] = useState(null); // null = all dates, or number of days
   const [tickerSearch, setTickerSearch] = useState('');
   const [error, setError] = useState(null);
+  const [txTypeFilter, setTxTypeFilter]     = useState('all');
+  const [sortOrder, setSortOrder]           = useState('signal');
+  const [filterModalTab, setFilterModalTab] = useState('member');
+  const filterPresets      = UseAppStore((s) => s.filterPresets);
+  const saveFilterPreset   = UseAppStore((s) => s.saveFilterPreset);
+  const removeFilterPreset = UseAppStore((s) => s.removeFilterPreset);
+  const { width }  = useWindowDimensions();
+  const isTablet   = width >= 768;
+  const numColumns = isTablet ? 2 : 1;
   const isMountedRef = useRef(true);
 
   const fetchData = useCallback(async (isRefresh = false) => {
@@ -197,7 +234,7 @@ const HomeScreen = ({ navigation }) => {
     }
 
     if (lastError && isMountedRef.current) {
-      setError('Failed to load data. Please try again.');
+      setError(ApiService.toUserMessage(lastError));
     }
 
     if (!isMountedRef.current) return;
@@ -215,8 +252,8 @@ const HomeScreen = ({ navigation }) => {
 
   // Grouped Stocks (Sorted by Ticker A-Z)
   const groupedStocks = useMemo(
-    () => buildGroupedStocks(rawData, selectedCongressman, dateFilterDays),
-    [rawData, selectedCongressman, dateFilterDays]
+    () => buildGroupedStocks(rawData, selectedCongressman, dateFilterDays, txTypeFilter, sortOrder),
+    [rawData, selectedCongressman, dateFilterDays, txTypeFilter, sortOrder]
   );
 
   const groupedByDate = useMemo(
@@ -248,7 +285,25 @@ const HomeScreen = ({ navigation }) => {
     setExpandedTicker((prev) => (prev === ticker ? null : ticker));
   }, []);
 
-  const handleOpenFilter = useCallback(() => setShowFilterModal(true), []);
+  const handleOpenFilter = useCallback(() => {
+    setFilterModalTab('member');
+    setShowFilterModal(true);
+  }, []);
+
+  const handleApplyPreset = useCallback((preset) => {
+    setSelectedCongressman(preset.congressman);
+    setTxTypeFilter(preset.txTypeFilter);
+    setSortOrder(preset.sortOrder);
+    if (preset.dateFilterDays !== undefined) setDateFilterDays(preset.dateFilterDays);
+    setShowFilterModal(false);
+  }, []);
+
+  const handleSavePreset = useCallback(() => {
+    const name = selectedCongressman !== ALL_CONGRESSMAN
+      ? selectedCongressman
+      : (txTypeFilter !== 'all' ? `${txTypeFilter === 'purchase' ? 'Buys' : 'Sells'} only` : 'Current Filters');
+    saveFilterPreset({ name, congressman: selectedCongressman, txTypeFilter, sortOrder, dateFilterDays });
+  }, [selectedCongressman, txTypeFilter, sortOrder, dateFilterDays, saveFilterPreset]);
   const handleCloseFilter = useCallback(() => setShowFilterModal(false), []);
   const handleRefresh = useCallback(() => fetchData(true), [fetchData]);
 
@@ -271,9 +326,18 @@ const HomeScreen = ({ navigation }) => {
                   </Text>
                 )}
               </View>
-              <Text style={styles.tradeCount}>
-                {item.transactions.length} trade{item.transactions.length > 1 ? 's' : ''}
-              </Text>
+              <View style={{ alignItems: 'flex-end' }}>
+                <Text style={styles.tradeCount}>
+                  {item.transactions.length} trade{item.transactions.length > 1 ? 's' : ''}
+                </Text>
+                {item.scoreInfo && (
+                  <View style={[styles.scoreBadge, { backgroundColor: item.scoreInfo.bg }]}>
+                    <Text style={[styles.scoreBadgeText, { color: item.scoreInfo.color }]}>
+                      ● {item.confidence} · {item.scoreInfo.label}
+                    </Text>
+                  </View>
+                )}
+              </View>
             </View>
           </TouchableOpacity>
 
@@ -398,51 +462,6 @@ const HomeScreen = ({ navigation }) => {
             </ScrollView>
           </View>
 
-          {/* FILTER MODAL */}
-          <Modal
-            visible={showFilterModal}
-            transparent
-            animationType="fade"
-            onRequestClose={handleCloseFilter}
-          >
-            <View style={styles.modalBackground}>
-              <View style={styles.modalContainer}>
-                <View style={styles.modalHeader}>
-                  <Text style={styles.modalTitle}>Filter by Congressman</Text>
-                  <TouchableOpacity onPress={handleCloseFilter}>
-                    <Icon name="close" size={24} color="#000" />
-                  </TouchableOpacity>
-                </View>
-
-                <FlatList
-                  data={congressmenList}
-                  keyExtractor={(item, idx) => idx.toString()}
-                  renderItem={({ item }) => (
-                    <TouchableOpacity
-                      style={[
-                        styles.filterOption,
-                        selectedCongressman === item && styles.filterOptionSelected
-                      ]}
-                      onPress={() => handleSelectCongressman(item)}
-                    >
-                      <Text style={[
-                        styles.filterOptionText,
-                        selectedCongressman === item && styles.filterOptionTextSelected
-                      ]}>
-                        {item}
-                      </Text>
-                      {selectedCongressman === item && (
-                        <Icon name="check" size={20} color="#007AFF" />
-                      )}
-                    </TouchableOpacity>
-                  )}
-                  scrollEnabled
-                  style={{ maxHeight: '80%' }}
-                />
-              </View>
-            </View>
-          </Modal>
-
           <FlatList
             data={dateFilterDays ? groupedByDate : groupedStocks}
             keyExtractor={(item) => (dateFilterDays ? item.dateKey : item.ticker)}
@@ -450,6 +469,14 @@ const HomeScreen = ({ navigation }) => {
             onRefresh={handleRefresh}
             refreshing={isRefreshing}
             contentContainerStyle={{ paddingVertical: 10, paddingBottom: 80 }}
+            ListHeaderComponent={
+              !dateFilterDays ? (
+                <View style={styles.signalBanner}>
+                  <Icon name="fire" size={15} color="#E65100" />
+                  <Text style={styles.signalBannerText}> Ranked by Congressional Signal</Text>
+                </View>
+              ) : null
+            }
             ListEmptyComponent={
               error ? (
                 <Text style={styles.emptyText}>{error}</Text>
@@ -464,8 +491,10 @@ const HomeScreen = ({ navigation }) => {
       {/* TICKERS TAB */}
       {activeTab === 'tickers' && (
         <FlatList
+          key={numColumns}
           data={filteredTickers}
           keyExtractor={(item) => item}
+          numColumns={numColumns}
           ListHeaderComponent={(
             <View style={styles.tickerSearchContainer}>
               <Icon name="magnify" size={18} color="#8E8E93" />
@@ -484,7 +513,7 @@ const HomeScreen = ({ navigation }) => {
           stickyHeaderIndices={[0]}
           renderItem={({ item: ticker }) => (
             <TouchableOpacity
-              style={styles.tickerCard}
+              style={[styles.tickerCard, numColumns === 2 && styles.tickerCardTablet]}
               onPress={() => navigation.navigate('StockDetail', { ticker })}
               activeOpacity={0.7}
             >
@@ -494,7 +523,7 @@ const HomeScreen = ({ navigation }) => {
               </View>
             </TouchableOpacity>
           )}
-          contentContainerStyle={{ paddingVertical: 10, paddingBottom: 80 }}
+            contentContainerStyle={{ paddingVertical: 10, paddingBottom: 80, paddingHorizontal: isTablet ? 40 : 0 }}
           ListEmptyComponent={
             error ? (
               <Text style={styles.emptyText}>{error}</Text>
@@ -505,29 +534,154 @@ const HomeScreen = ({ navigation }) => {
         />
       )}
 
-      {/* BOTTOM NAVIGATION */}
+          {/* ENHANCED FILTER MODAL */}
+          <Modal
+            visible={showFilterModal}
+            transparent
+            animationType="slide"
+            onRequestClose={handleCloseFilter}
+          >
+            <View style={styles.modalBackground}>
+              <View style={styles.modalContainer}>
+                <View style={styles.modalHeader}>
+                  <Text style={styles.modalTitle}>Filters</Text>
+                  <TouchableOpacity onPress={handleCloseFilter}>
+                    <Icon name="close" size={24} color="#000" />
+                  </TouchableOpacity>
+                </View>
+
+                {/* Tab row */}
+                <View style={styles.modalTabRow}>
+                  {['member', 'options'].map((tab) => (
+                    <TouchableOpacity
+                      key={tab}
+                      style={[styles.modalTab, filterModalTab === tab && styles.modalTabActive]}
+                      onPress={() => setFilterModalTab(tab)}
+                    >
+                      <Text style={[styles.modalTabText, filterModalTab === tab && styles.modalTabTextActive]}>
+                        {tab === 'member' ? 'Member' : 'Sort & Filter'}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+
+                {filterModalTab === 'member' ? (
+                  <FlatList
+                    data={congressmenList}
+                    keyExtractor={(item, idx) => idx.toString()}
+                    renderItem={({ item }) => (
+                      <TouchableOpacity
+                        style={[
+                          styles.filterOption,
+                          selectedCongressman === item && styles.filterOptionSelected,
+                        ]}
+                        onPress={() => handleSelectCongressman(item)}
+                      >
+                        <Text style={[
+                          styles.filterOptionText,
+                          selectedCongressman === item && styles.filterOptionTextSelected,
+                        ]}>
+                          {item}
+                        </Text>
+                        {selectedCongressman === item && <Icon name="check" size={20} color="#007AFF" />}
+                      </TouchableOpacity>
+                    )}
+                    scrollEnabled
+                    style={{ maxHeight: '70%' }}
+                  />
+                ) : (
+                  <ScrollView style={{ maxHeight: '70%' }}>
+                    <View style={styles.optSection}>
+                      <Text style={styles.optSectionTitle}>Transaction Type</Text>
+                      <View style={styles.optRow}>
+                        {[
+                          { key: 'all', label: 'All' },
+                          { key: 'purchase', label: '▲ Purchases' },
+                          { key: 'sale', label: '▼ Sales' },
+                        ].map((opt) => (
+                          <TouchableOpacity
+                            key={opt.key}
+                            style={[styles.optChip, txTypeFilter === opt.key && styles.optChipActive]}
+                            onPress={() => setTxTypeFilter(opt.key)}
+                          >
+                            <Text style={[styles.optChipText, txTypeFilter === opt.key && styles.optChipTextActive]}>
+                              {opt.label}
+                            </Text>
+                          </TouchableOpacity>
+                        ))}
+                      </View>
+                    </View>
+
+                    <View style={styles.optSection}>
+                      <Text style={styles.optSectionTitle}>Sort By</Text>
+                      <View style={styles.optRow}>
+                        {[
+                          { key: 'signal', label: '⚡ Signal Score' },
+                          { key: 'trades', label: '📊 Most Trades' },
+                          { key: 'recent', label: '🕐 Most Recent' },
+                        ].map((opt) => (
+                          <TouchableOpacity
+                            key={opt.key}
+                            style={[styles.optChip, sortOrder === opt.key && styles.optChipActive]}
+                            onPress={() => setSortOrder(opt.key)}
+                          >
+                            <Text style={[styles.optChipText, sortOrder === opt.key && styles.optChipTextActive]}>
+                              {opt.label}
+                            </Text>
+                          </TouchableOpacity>
+                        ))}
+                      </View>
+                    </View>
+
+                    {filterPresets && filterPresets.length > 0 && (
+                      <View style={styles.optSection}>
+                        <Text style={styles.optSectionTitle}>Saved Presets</Text>
+                        {filterPresets.map((preset, idx) => (
+                          <View key={idx} style={styles.presetRow}>
+                            <TouchableOpacity style={styles.presetApplyBtn} onPress={() => handleApplyPreset(preset)}>
+                              <Icon name="bookmark-outline" size={16} color="#007AFF" />
+                              <Text style={styles.presetName}>{preset.name}</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity onPress={() => removeFilterPreset(idx)}>
+                              <Icon name="close-circle" size={20} color="#C62828" />
+                            </TouchableOpacity>
+                          </View>
+                        ))}
+                      </View>
+                    )}
+
+                    <TouchableOpacity style={styles.savePresetBtn} onPress={handleSavePreset}>
+                      <Icon name="content-save-outline" size={18} color="#007AFF" />
+                      <Text style={styles.savePresetBtnText}> Save Current Filters as Preset</Text>
+                    </TouchableOpacity>
+                  </ScrollView>
+                )}
+              </View>
+            </View>
+          </Modal>
+
       <View style={styles.bottomNav}>
-        <TouchableOpacity 
+        <TouchableOpacity
           style={[styles.navButton, activeTab === 'transactions' && styles.navButtonActive]}
           onPress={() => setActiveTab('transactions')}
         >
-          <Icon 
-            name="pen" 
-            size={24} 
-            color={activeTab === 'transactions' ? '#007AFF' : '#8E8E93'} 
+          <Icon
+            name="pen"
+            size={24}
+            color={activeTab === 'transactions' ? '#007AFF' : '#8E8E93'}
           />
           <Text style={[styles.navButtonText, activeTab === 'transactions' && styles.navButtonTextActive]}>
             Transactions
           </Text>
         </TouchableOpacity>
-        <TouchableOpacity 
+        <TouchableOpacity
           style={[styles.navButton, activeTab === 'tickers' && styles.navButtonActive]}
           onPress={() => setActiveTab('tickers')}
         >
-          <Icon 
-            name="format-list-bulleted" 
-            size={24} 
-            color={activeTab === 'tickers' ? '#007AFF' : '#8E8E93'} 
+          <Icon
+            name="format-list-bulleted"
+            size={24}
+            color={activeTab === 'tickers' ? '#007AFF' : '#8E8E93'}
           />
           <Text style={[styles.navButtonText, activeTab === 'tickers' && styles.navButtonTextActive]}>
             Stock List
@@ -797,6 +951,54 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   navButtonTextActive: {
+      tickerCardTablet: { flex: 1, marginHorizontal: 8 },
+      modalTabRow: {
+        flexDirection: 'row',
+        paddingHorizontal: 16,
+        paddingVertical: 8,
+        borderBottomWidth: 1,
+        borderBottomColor: '#E1E4E8',
+        gap: 8,
+      },
+      modalTab: { flex: 1, paddingVertical: 8, alignItems: 'center', borderRadius: 8 },
+      modalTabActive: { backgroundColor: '#EFF6FF' },
+      modalTabText: { fontSize: 14, fontWeight: '600', color: '#6B7280' },
+      modalTabTextActive: { color: '#007AFF' },
+      optSection: { paddingHorizontal: 16, paddingTop: 16 },
+      optSectionTitle: { fontSize: 12, fontWeight: '700', color: '#6B7280', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 10 },
+      optRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+      optChip: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20, backgroundColor: '#F3F4F6', borderWidth: 1, borderColor: '#E5E7EB' },
+      optChipActive: { backgroundColor: '#007AFF', borderColor: '#007AFF' },
+      optChipText: { fontSize: 13, fontWeight: '600', color: '#374151' },
+      optChipTextActive: { color: '#fff' },
+      presetRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 10, borderBottomWidth: 0.5, borderBottomColor: '#E5E7EB' },
+      presetApplyBtn: { flex: 1, flexDirection: 'row', alignItems: 'center' },
+      presetName: { fontSize: 14, fontWeight: '600', color: '#374151', marginLeft: 8 },
+      savePresetBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', margin: 16, padding: 14, backgroundColor: '#EFF6FF', borderRadius: 12, borderWidth: 1, borderColor: '#BFDBFE' },
+      savePresetBtnText: { fontSize: 14, fontWeight: '700', color: '#007AFF' },
     color: '#007AFF',
+  },
+  scoreBadge: {
+    marginTop: 4,
+    paddingHorizontal: 7,
+    paddingVertical: 3,
+    borderRadius: 8,
+  },
+  scoreBadgeText: {
+    fontSize: 10,
+    fontWeight: '700',
+  },
+  signalBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginHorizontal: 14,
+    marginTop: 6,
+    marginBottom: 8,
+  },
+  signalBannerText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#E65100',
+    marginLeft: 4,
   },
 });

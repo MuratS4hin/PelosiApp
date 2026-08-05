@@ -1,9 +1,10 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, ActivityIndicator, StyleSheet, Dimensions, TouchableOpacity, FlatList, ScrollView, Linking, Modal, Pressable, Alert } from 'react-native';
 import { LineChart } from 'react-native-gifted-charts';
-import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
+import { MaterialCommunityIcons as Icon } from '@expo/vector-icons';
 import UseAppStore from '../store/UseAppStore';
 import ApiService from '../services/ApiService';
+import { computeConfidenceScore, getScoreLabel } from '../utils/ConfidenceScore';
 
 const StockDetailScreen = ({ route, navigation }) => {
   // Set default dates (last 1 year) if not provided
@@ -166,12 +167,45 @@ const StockDetailScreen = ({ route, navigation }) => {
     return <Text style={styles.errorText}>No data available for {ticker}</Text>;
   }
 
+  if (stockData?.error) {
+    return <Text style={styles.errorText}>{stockData.error}</Text>;
+  }
+
+  const stockPayload = stockData?.data && typeof stockData.data === 'object' ? stockData.data : stockData;
+
+  const parseNumber = (value) => {
+    if (typeof value === 'number') return Number.isFinite(value) ? value : null;
+    if (typeof value !== 'string') return null;
+    const normalized = value.replace(/,/g, '').replace('%', '').trim();
+    if (!normalized) return null;
+    const n = Number(normalized);
+    return Number.isFinite(n) ? n : null;
+  };
+
+  const normalizedChart = Array.isArray(stockPayload?.chart)
+    ? stockPayload.chart
+    : Array.isArray(stockPayload?.prices)
+      ? stockPayload.prices
+      : [];
+
   // Compute simple analytics from chart
-  const chartCloses = (stockData.chart || []).map(p => Number(p.close)).filter(v => !isNaN(v));
-  const high = chartCloses.length ? Math.max(...chartCloses) : null;
-  const low = chartCloses.length ? Math.min(...chartCloses) : null;
-  const avg = chartCloses.length ? (chartCloses.reduce((a,b) => a+b,0) / chartCloses.length) : null;
+  const chartCloses = normalizedChart
+    .map((point) => parseNumber(point?.close ?? point?.c ?? point?.price ?? point?.value))
+    .filter((value) => value !== null);
+
+  const highFromChart = chartCloses.length ? Math.max(...chartCloses) : null;
+  const lowFromChart = chartCloses.length ? Math.min(...chartCloses) : null;
+  const avgFromChart = chartCloses.length ? (chartCloses.reduce((a, b) => a + b, 0) / chartCloses.length) : null;
+
+  const high = highFromChart ?? parseNumber(stockPayload?.high_price ?? stockPayload?.high ?? stockPayload?.h);
+  const low = lowFromChart ?? parseNumber(stockPayload?.low_price ?? stockPayload?.low ?? stockPayload?.l);
+  const avg = avgFromChart ?? parseNumber(stockPayload?.avg_price ?? stockPayload?.average);
   const pctChange = chartCloses.length > 1 ? (((chartCloses[chartCloses.length-1] - chartCloses[0]) / chartCloses[0]) * 100) : null;
+  const apiPercentChange = parseNumber(stockPayload?.percent_change ?? stockPayload?.change_percent);
+  const displayPercent = pctChange ?? apiPercentChange;
+  const currentPrice = chartCloses[chartCloses.length - 1]
+    ?? parseNumber(stockPayload?.current_price ?? stockPayload?.last_price ?? stockPayload?.c)
+    ?? parseNumber(stockPayload?.first_price);
   const latestRec = Array.isArray(recommendations) && recommendations.length > 0 ? recommendations[0] : null;
 
   // Helpers to parse and format transaction/report dates
@@ -237,43 +271,44 @@ const StockDetailScreen = ({ route, navigation }) => {
         <View style={{ paddingTop: 20, paddingHorizontal: 20 }}>
           {/* Price header: large price + percent badge */}
           <View style={styles.priceRow}>
-            <View>
+            <View style={styles.priceInfoLeft}>
               <Text style={styles.title}>{ticker}</Text>
-              <Text style={styles.companyText}>{stockData.company_name}</Text>
+              <Text style={styles.companyText} numberOfLines={1} ellipsizeMode="tail">{stockPayload?.company_name || stockPayload?.name || '-'}</Text>
             </View>
             <View style={styles.priceBox}>
-              {/* prefer chart last close if available */}
-              {chartCloses.length > 0 ? (
-                <Text style={styles.priceText}>${chartCloses[chartCloses.length - 1].toFixed(2)}</Text>
-              ) : (
-                <Text style={styles.priceText}>${Number(stockData.last_price).toFixed(2)}</Text>
-              )}
-              <View style={[styles.percentBadge, (pctChange >= 0) ? styles.percentUp : styles.percentDown]}>
-                <Text style={styles.percentText}>{pctChange !== null ? `${pctChange.toFixed(2)}%` : (stockData.percent_change || '-')}</Text>
+              <Text style={styles.priceText}>{currentPrice !== null ? `$${currentPrice.toFixed(2)}` : '-'}</Text>
+              <View style={[styles.percentBadge, (displayPercent ?? 0) >= 0 ? styles.percentUp : styles.percentDown]}>
+                <Text style={styles.percentText}>{displayPercent !== null ? `${displayPercent.toFixed(2)}%` : '-'}</Text>
               </View>
             </View>
           </View>
 
           {/* Interactive Chart */}
-          {stockData.chart && stockData.chart.length > 0 && (() => {
-            const isPositive = pctChange >= 0;
+          {normalizedChart.length > 0 && (() => {
+            const isPositive = (displayPercent ?? 0) >= 0;
             const lineColor = isPositive ? '#10B981' : '#EF4444';
             const gradientColor = isPositive ? '#10B98140' : '#EF444440';
             
             // Create data points with labels
-            const chartData = stockData.chart.map((point, index) => {
-              const date = new Date(point.date);
-              const day = String(date.getDate()).padStart(2, '0');
-              const month = String(date.getMonth() + 1).padStart(2, '0');
-              const year = date.getFullYear();
+            const chartData = normalizedChart
+              .map((point, index) => {
+              const closeValue = parseNumber(point?.close ?? point?.c ?? point?.price ?? point?.value);
+              if (closeValue === null) return null;
+              const rawDate = point?.date ?? point?.datetime ?? point?.t;
+              const date = rawDate ? new Date(rawDate) : null;
+              const safeDay = date && !isNaN(date.getTime()) ? String(date.getDate()).padStart(2, '0') : '';
+              const safeMonth = date && !isNaN(date.getTime()) ? String(date.getMonth() + 1).padStart(2, '0') : '';
               
               return {
-                value: Number(point.close),
-                date: `${day}.${month}.${year}`,
-                label: index % Math.floor(stockData.chart.length / 6) === 0 ? `${day}.${month}` : '',
+                value: closeValue,
+                date: safeDay && safeMonth ? `${safeDay}.${safeMonth}.${date.getFullYear()}` : '-',
+                label: safeDay && safeMonth && (index % Math.max(1, Math.floor(normalizedChart.length / 6)) === 0) ? `${safeDay}.${safeMonth}` : '',
                 labelTextStyle: { color: '#6B7280', fontSize: 10 }
               };
-            });
+            })
+              .filter(Boolean);
+
+            if (chartData.length === 0) return null;
 
             const screenWidth = Dimensions.get('window').width;
             const parentPadding = 40; // 20 on each side
@@ -283,7 +318,7 @@ const StockDetailScreen = ({ route, navigation }) => {
             const plotWidth = availableWidth - yAxisWidth - 10; // extra margin for safety
             
             const spacing = chartData.length > 1 ? Math.min(plotWidth / (chartData.length - 1), 40) : 20;
-            const maxVal = high ? high * 1.05 : 100;
+            const maxVal = high !== null ? high * 1.05 : 100;
 
             return (
               <View style={styles.chartContainer}>
@@ -367,7 +402,30 @@ const StockDetailScreen = ({ route, navigation }) => {
           </View>
 
           {/* Recommendation Trends */}
-          {/* <Text style={styles.sectionTitle}>Recommendation Trends</Text> */}
+          {/* Congress Signal Score */}
+          {!txLoading && transactions.length > 0 && (() => {
+            const txForScore = transactions.map((row) => ({
+              date: parseTxDate((row[2] || '').toString().split('\n')[0]),
+              type: (row[3] || row[4] || '').toString(),
+            }));
+            const score = computeConfidenceScore(txForScore);
+            const info = getScoreLabel(score);
+            return (
+              <View style={[styles.scoreCard, { backgroundColor: info.bg }]}>
+                <View style={styles.scoreCardLeft}>
+                  <Text style={styles.scoreCardLabel}>Congress Signal Score</Text>
+                  <Text style={[styles.scoreCardValue, { color: info.color }]}>{score} / 100</Text>
+                  <Text style={[styles.scoreCardSub, { color: info.color }]}>{info.label}</Text>
+                  <Text style={styles.scoreCardHint}>
+                    Based on {transactions.length} congressional filing{transactions.length !== 1 ? 's' : ''}
+                  </Text>
+                </View>
+                <View style={[styles.scoreCircle, { borderColor: info.color }]}>
+                  <Text style={[styles.scoreCircleText, { color: info.color }]}>{score}</Text>
+                </View>
+              </View>
+            );
+          })()}
           {recLoading ? (
             <ActivityIndicator style={{ marginTop: 8 }} />
           ) : latestRec ? (
@@ -564,13 +622,14 @@ const styles = StyleSheet.create({
   recLegendText: { fontSize: 11, color: '#6B7280' },
   recEmpty: { marginTop: 6, color: '#8E8E93' },
   priceRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  priceInfoLeft: { flex: 1, paddingRight: 12 },
   priceBox: { alignItems: 'flex-end' },
   priceText: { fontSize: 20, fontWeight: '800', color: '#1C1C1E' },
   percentBadge: { marginTop: 6, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 12 },
   percentText: { color: '#fff', fontWeight: '700' },
   percentUp: { backgroundColor: '#2E7D32' },
   percentDown: { backgroundColor: '#C62828' },
-  companyText: { color: '#6B7280', marginTop: 2 },
+  companyText: { color: '#6B7280', marginTop: 2, flexShrink: 1 },
   txCard: { backgroundColor: '#fff', marginHorizontal: 16, borderRadius: 12, padding: 8, marginBottom: 8, elevation: 1, shadowColor: '#000', shadowOpacity: 0.03, shadowRadius: 6, shadowOffset: { width: 0, height: 2 } },
   txRowInner: { flexDirection: 'row', alignItems: 'center' },
   amountText: { fontSize: 12, color: '#111827', marginTop: 6, fontWeight: '700' },
@@ -613,6 +672,37 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '700',
   },
+  scoreCard: {
+    borderRadius: 14,
+    padding: 16,
+    marginTop: 16,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  scoreCardLeft: { flex: 1 },
+  scoreCardLabel: {
+    fontSize: 11,
+    color: '#6B7280',
+    fontWeight: '600',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    marginBottom: 4,
+  },
+  scoreCardValue: { fontSize: 24, fontWeight: '800' },
+  scoreCardSub: { fontSize: 13, fontWeight: '700', marginTop: 2 },
+  scoreCardHint: { fontSize: 11, color: '#9CA3AF', marginTop: 4 },
+  scoreCircle: {
+    width: 68,
+    height: 68,
+    borderRadius: 34,
+    borderWidth: 3,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#fff',
+    marginLeft: 12,
+  },
+  scoreCircleText: { fontSize: 22, fontWeight: '800' },
 });
 
 export default StockDetailScreen;

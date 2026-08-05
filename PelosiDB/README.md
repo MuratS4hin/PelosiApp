@@ -38,7 +38,7 @@ docker build -t pelosidb .
 ```bash
 docker run -d \
   --name pelosidb \
-  -p 8000:8000 \
+  -p 8001:8001 \
   -e DB_HOST=ep-quiet-dust-a8yflq7j-pooler.eastus2.azure.neon.tech \
   -e DB_NAME=neondb \
   -e DB_USER=neondb_owner \
@@ -54,7 +54,7 @@ If you want to use the .env file directly in the container, run:
 ```bash
 docker run -d \
   --name pelosidb \
-  -p 8000:8000 \
+  -p 8001:8001 \
   --env-file .env \
   pelosidb
 ```
@@ -88,5 +88,5 @@ docker logs -f pelosidb
 ## Access the API
 
 Once running, access the API at:
-- http://localhost:8000
-- API docs: http://localhost:8000/docs
+- http://localhost:8001
+- API docs: http://localhost:8001/docs

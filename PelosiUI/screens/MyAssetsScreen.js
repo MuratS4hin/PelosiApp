@@ -6,12 +6,13 @@ import {
   ActivityIndicator,
   StyleSheet,
   TouchableOpacity,
-  Alert
+  Alert,
+  Share,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import UseAppStore from '../store/UseAppStore';
 import ApiService from '../services/ApiService';
-import Icon from "react-native-vector-icons/MaterialCommunityIcons";
+import { MaterialCommunityIcons as Icon } from '@expo/vector-icons';
 
 
 const MyAssetsScreen = () => {
@@ -22,6 +23,27 @@ const MyAssetsScreen = () => {
   const user = UseAppStore((s) => s.user);
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const exportCsv = async () => {
+    if (!myAssets.length) return;
+    const csv = ['ticker,addedDate']
+      .concat(myAssets.map((a) => `${a.ticker},${a.addedDate || ''}`))
+      .join('\n');
+    try {
+      await Share.share({ message: csv, title: 'My Watchlist CSV' });
+    } catch (e) {
+      console.warn('Share failed:', e.message || e);
+    }
+  };
+
+  const shareWatchlistSummary = async () => {
+    if (!myAssets.length) return;
+    const summary = `My Portrace watchlist (${myAssets.length} stocks): ${myAssets.map((a) => a.ticker).join(', ')}`;
+    try {
+      await Share.share({ message: summary, title: 'My Watchlist' });
+    } catch (e) {
+      console.warn('Share failed:', e.message || e);
+    }
+  };
 
   useEffect(() => {
     const loadFavorites = async () => {
@@ -156,6 +178,14 @@ const MyAssetsScreen = () => {
 
   return (
     <>
+      <View style={styles.actionRow}>
+        <TouchableOpacity style={styles.actionBtn} onPress={shareWatchlistSummary}>
+          <Text style={styles.actionBtnText}>Share Watchlist</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.actionBtnSecondary} onPress={exportCsv}>
+          <Text style={styles.actionBtnSecondaryText}>Export CSV</Text>
+        </TouchableOpacity>
+      </View>
       <FlatList
         data={myAssets}
         keyExtractor={(item, i) => i.toString()}
@@ -225,4 +255,9 @@ const styles = StyleSheet.create({
     borderRadius: 8,
   },
   loginButtonText: { color: '#fff', fontWeight: '600' },
+  actionRow: { flexDirection: 'row', gap: 10, paddingHorizontal: 16, paddingTop: 16, paddingBottom: 4 },
+  actionBtn: { flex: 1, backgroundColor: '#007AFF', paddingVertical: 12, borderRadius: 10, alignItems: 'center' },
+  actionBtnText: { color: '#fff', fontWeight: '700' },
+  actionBtnSecondary: { flex: 1, backgroundColor: '#EFF6FF', paddingVertical: 12, borderRadius: 10, alignItems: 'center', borderWidth: 1, borderColor: '#BFDBFE' },
+  actionBtnSecondaryText: { color: '#007AFF', fontWeight: '700' },
 });

@@ -13,6 +13,16 @@ export default function App() {
 
   useEffect(() => {
     const init = async () => {
+      // Wait for the persisted store to rehydrate from AsyncStorage
+      // so hasSeenOnboarding is correctly read before rendering.
+      if (!UseAppStore.persist.hasHydrated()) {
+        await new Promise((resolve) => {
+          const unsub = UseAppStore.persist.onFinishHydration(() => {
+            unsub();
+            resolve();
+          });
+        });
+      }
       setLoading(false);
     };
 

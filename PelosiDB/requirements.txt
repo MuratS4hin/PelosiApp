@@ -5,3 +5,4 @@ playwright
 psycopg2-binary
 python-dotenv
 yfinance
+beautifulsoup4

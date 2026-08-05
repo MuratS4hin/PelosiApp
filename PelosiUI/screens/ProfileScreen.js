@@ -163,6 +163,12 @@ export default function ProfileScreen({ navigation, route, activeTabInfo='favori
         <View style={styles.card}>
           <Text style={styles.label}>Signed in as</Text>
           <Text style={styles.value}>{user.email}</Text>
+          <TouchableOpacity style={styles.menuLink} onPress={() => navigation.navigate('NotificationPrefs')}>
+            <Text style={styles.menuLinkText}>Alert Preferences</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.menuLink} onPress={() => navigation.navigate('Transparency')}>
+            <Text style={styles.menuLinkText}>Data Transparency</Text>
+          </TouchableOpacity>
           <TouchableOpacity style={styles.buttonSecondary} onPress={handleLogout}>
             <Text style={styles.buttonTextSecondary}>Log out</Text>
           </TouchableOpacity>
@@ -256,4 +262,6 @@ const styles = StyleSheet.create({
   buttonTextDanger: { textAlign: 'center', color: '#DC2626', fontSize: 16, fontWeight: '600' },
   link: { marginTop: 12 },
   linkText: { color: '#007AFF', textAlign: 'center' },
+  menuLink: { backgroundColor: '#F9FAFB', padding: 12, borderRadius: 8, marginTop: 10, borderWidth: 1, borderColor: '#E5E7EB' },
+  menuLinkText: { color: '#111827', fontSize: 15, fontWeight: '600' },
 });

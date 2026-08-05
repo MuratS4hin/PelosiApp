@@ -9,6 +9,20 @@ const useAppStore = create(
       myAssets: [],
       user: null,
       token: null,
+      hasSeenOnboarding: false,
+      filterPresets: [],
+      notifPrefs: {},
+
+      setHasSeenOnboarding: (val) => set({ hasSeenOnboarding: val }),
+      saveFilterPreset: (preset) =>
+        set((s) => ({ filterPresets: [...(s.filterPresets || []), preset] })),
+
+      removeFilterPreset: (idx) =>
+        set((s) => ({ filterPresets: (s.filterPresets || []).filter((_, i) => i !== idx) })),
+
+      setNotifPref: (key, val) =>
+        set((s) => ({ notifPrefs: { ...(s.notifPrefs || {}), [key]: val } })),
+
 
       setAuth: ({ user, token }) =>
         set(() => ({
