@@ -23,10 +23,46 @@ const MyAssetsScreen = () => {
   const user = UseAppStore((s) => s.user);
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+
+  const loadFavorites = async () => {
+    if (!user) {
+      setMyAssets([]);
+      return;
+    }
+
+    try {
+      const favorites = await ApiService.listFavorites();
+      const existingAssets = UseAppStore.getState().myAssets || [];
+      const existingByTicker = new Map(
+        existingAssets
+          .filter((asset) => asset?.ticker)
+          .map((asset) => [asset.ticker.toUpperCase(), asset])
+      );
+
+      const mapped = (favorites || []).map((favorite) => {
+        const ticker = (favorite.ticker || '').toUpperCase();
+        const existing = existingByTicker.get(ticker);
+
+        return {
+          ticker,
+          addedDate: favorite.created_at,
+          buyDate: existing?.buyDate || favorite.created_at,
+          buyPrice: existing?.buyPrice ?? null,
+          buyAmount: existing?.buyAmount ?? null,
+          buyQuantity: existing?.buyQuantity ?? 1,
+          id: `${ticker}-${favorite.created_at || Date.now()}`,
+        };
+      });
+
+      setMyAssets(mapped);
+    } catch (e) {
+      console.warn('Could not load favorites:', e.message || e);
+    }
+  };
   const exportCsv = async () => {
     if (!myAssets.length) return;
-    const csv = ['ticker,addedDate']
-      .concat(myAssets.map((a) => `${a.ticker},${a.addedDate || ''}`))
+    const csv = ['ticker,buyDate']
+      .concat(myAssets.map((a) => `${a.ticker},${a.buyDate || ''}`))
       .join('\n');
     try {
       await Share.share({ message: csv, title: 'My Watchlist CSV' });
@@ -46,25 +82,23 @@ const MyAssetsScreen = () => {
   };
 
   useEffect(() => {
-    const loadFavorites = async () => {
-      if (!user) return;
-      try {
-        setLoading(true);
-        const favorites = await ApiService.listFavorites();
-        const mapped = (favorites || []).map((f) => ({
-          ticker: f.ticker,
-          addedDate: f.created_at,
-          id: `${f.ticker}-${f.created_at}`,
-        }));
-        setMyAssets(mapped);
-      } catch (e) {
-        console.warn('Could not load favorites:', e.message || e);
-      } finally {
-        setLoading(false);
-      }
+    let mounted = true;
+    const run = async () => {
+      setLoading(true);
+      await loadFavorites();
+      if (mounted) setLoading(false);
     };
-    loadFavorites();
+    run();
+    return () => {
+      mounted = false;
+    };
   }, [user, setMyAssets]);
+
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    await loadFavorites();
+    setRefreshing(false);
+  };
 
   const confirmDelete = (ticker) => {
     Alert.alert(
@@ -95,15 +129,17 @@ const MyAssetsScreen = () => {
       comment,
       change,
       chartData,
-      addedDate
+      buyDate
     } = item;
+
+    const effectiveBuyDate = buyDate || item.addedDate;
 
     const fifteenDaysAgo = new Date();
     fifteenDaysAgo.setDate(fifteenDaysAgo.getDate() - 15);
 
-    const startDate = new Date(addedDate) >= fifteenDaysAgo
+    const startDate = new Date(effectiveBuyDate) >= fifteenDaysAgo
       ? fifteenDaysAgo.toISOString().slice(0, 10)
-      : addedDate;
+      : effectiveBuyDate;
 
     const companyName = chartData?.company_name || ticker;
     const percentChange = chartData?.percent_change ?? "N/A";
@@ -137,7 +173,7 @@ const MyAssetsScreen = () => {
               )}
             </>
           ) : (
-            <Text style={styles.details}>Added: {addedDate ? new Date(addedDate).toLocaleDateString() : '-'}</Text>
+            <Text style={styles.details}>Added: {effectiveBuyDate ? new Date(effectiveBuyDate).toLocaleDateString() : '-'}</Text>
           )}
         </TouchableOpacity>
 
@@ -192,7 +228,7 @@ const MyAssetsScreen = () => {
         renderItem={renderItem}
         contentContainerStyle={styles.listContainer}
         refreshing={refreshing}
-        onRefresh={() => setRefreshing(true)}
+        onRefresh={handleRefresh}
       />
 
     </>

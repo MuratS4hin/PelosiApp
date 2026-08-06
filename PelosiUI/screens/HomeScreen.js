@@ -11,6 +11,7 @@ import {
   TextInput,
   useWindowDimensions,
 } from 'react-native';
+import { useFocusEffect } from '@react-navigation/native';
 import { MaterialCommunityIcons as Icon } from '@expo/vector-icons';
 import ApiService from '../services/ApiService';
 import UseAppStore from '../store/UseAppStore';
@@ -182,6 +183,66 @@ const getUniqueTickers = (rawData) => {
   return Array.from(tickers).sort();
 };
 
+const formatFavoriteDate = (value) => {
+  if (!value) return 'Recently added';
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return 'Recently added';
+  return parsed.toLocaleDateString();
+};
+
+const formatApiDate = (value) => {
+  const parsed = value ? new Date(value) : null;
+  if (!parsed || Number.isNaN(parsed.getTime())) return null;
+  return parsed.toISOString().slice(0, 10);
+};
+
+const parseNumeric = (value) => {
+  if (typeof value === 'number') return Number.isFinite(value) ? value : null;
+  if (typeof value !== 'string') return null;
+  const normalized = value.replace(/,/g, '').replace('%', '').trim();
+  if (!normalized) return null;
+  const parsed = Number(normalized);
+  return Number.isFinite(parsed) ? parsed : null;
+};
+
+const extractPriceWindow = (response) => {
+  const payload = response?.data && typeof response.data === 'object' ? response.data : response;
+  const chart = Array.isArray(payload?.chart)
+    ? payload.chart
+    : Array.isArray(payload?.prices)
+      ? payload.prices
+      : [];
+
+  const closes = chart
+    .map((point) => parseNumeric(point?.close ?? point?.c ?? point?.price ?? point?.value))
+    .filter((val) => val !== null);
+
+  const startPrice = closes.length
+    ? closes[0]
+    : parseNumeric(payload?.first_price ?? payload?.open_price ?? payload?.o ?? payload?.open);
+
+  const currentPrice = closes.length
+    ? closes[closes.length - 1]
+    : parseNumeric(payload?.last_price ?? payload?.current_price ?? payload?.c ?? payload?.close);
+
+  return { startPrice, currentPrice };
+};
+
+const getAssetQuantity = (asset) => {
+  const quantity = parseNumeric(asset?.buyQuantity);
+  return quantity && quantity > 0 ? quantity : 1;
+};
+
+const mergeFavoriteWithAsset = (favorite, currentAsset) => ({
+  ticker: favorite.ticker,
+  addedDate: favorite.created_at,
+  id: `${favorite.ticker}-${favorite.created_at || 'favorite'}`,
+  buyPrice: currentAsset?.buyPrice ?? null,
+  buyAmount: currentAsset?.buyAmount ?? null,
+  buyQuantity: currentAsset?.buyQuantity ?? 1,
+  buyDate: currentAsset?.buyDate ?? null,
+});
+
 const HomeScreen = ({ navigation }) => {
   const [rawData, setRawData] = useState([]); 
   const [congressmenList, setCongressmenList] = useState([]);
@@ -194,9 +255,16 @@ const HomeScreen = ({ navigation }) => {
   const [dateFilterDays, setDateFilterDays] = useState(null); // null = all dates, or number of days
   const [tickerSearch, setTickerSearch] = useState('');
   const [error, setError] = useState(null);
+  const [favoritesError, setFavoritesError] = useState(null);
+  const [favoritesLoading, setFavoritesLoading] = useState(false);
+  const [netDiffLoading, setNetDiffLoading] = useState(false);
+  const [netDifference, setNetDifference] = useState(0);
   const [txTypeFilter, setTxTypeFilter]     = useState('all');
   const [sortOrder, setSortOrder]           = useState('signal');
   const [filterModalTab, setFilterModalTab] = useState('member');
+  const user               = UseAppStore((s) => s.user);
+  const myAssets           = UseAppStore((s) => s.myAssets);
+  const setMyAssets        = UseAppStore((s) => s.setMyAssets);
   const filterPresets      = UseAppStore((s) => s.filterPresets);
   const saveFilterPreset   = UseAppStore((s) => s.saveFilterPreset);
   const removeFilterPreset = UseAppStore((s) => s.removeFilterPreset);
@@ -249,6 +317,94 @@ const HomeScreen = ({ navigation }) => {
       isMountedRef.current = false;
     };
   }, [fetchData]);
+
+  const fetchFavorites = useCallback(async () => {
+    if (!user) {
+      setMyAssets([]);
+      setFavoritesError(null);
+      setNetDifference(0);
+      return;
+    }
+
+    setFavoritesLoading(true);
+    setFavoritesError(null);
+
+    try {
+      const favorites = await ApiService.listFavorites();
+      if (!isMountedRef.current) return;
+      const currentAssets = UseAppStore.getState().myAssets || [];
+      const assetsByTicker = new Map(
+        currentAssets
+          .filter((asset) => asset?.ticker)
+          .map((asset) => [asset.ticker.toUpperCase(), asset])
+      );
+      const mergedAssets = (favorites || []).map((favorite) =>
+        mergeFavoriteWithAsset(favorite, assetsByTicker.get((favorite.ticker || '').toUpperCase()))
+      );
+      setMyAssets(mergedAssets);
+    } catch (err) {
+      console.warn('Could not load favorites:', err?.message || err);
+      if (!isMountedRef.current) return;
+      setFavoritesError(ApiService.toUserMessage(err));
+    } finally {
+      if (isMountedRef.current) setFavoritesLoading(false);
+    }
+  }, [user, setMyAssets]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const calculateNetDifference = async () => {
+      if (activeTab !== 'home' || !user || !myAssets.length) {
+        setNetDifference(0);
+        setNetDiffLoading(false);
+        return;
+      }
+
+      setNetDiffLoading(true);
+      const endDate = new Date().toISOString().slice(0, 10);
+
+      try {
+        const diffs = await Promise.all(
+          myAssets.map(async (asset) => {
+            const ticker = (asset?.ticker || '').toUpperCase();
+            const startDate = formatApiDate(asset?.buyDate);
+            const quantity = getAssetQuantity(asset);
+
+            if (!ticker || !startDate || !quantity) return 0;
+
+            try {
+              const res = await ApiService.get(`stocks/${ticker}?start=${startDate}&end=${endDate}`);
+              const { startPrice, currentPrice } = extractPriceWindow(res);
+
+              if (!Number.isFinite(startPrice) || !Number.isFinite(currentPrice)) return 0;
+              return (currentPrice - startPrice) * quantity;
+            } catch (err) {
+              console.warn(`Could not compute net difference for ${ticker}:`, err?.message || err);
+              return 0;
+            }
+          })
+        );
+
+        if (cancelled) return;
+        setNetDifference(diffs.reduce((sum, value) => sum + value, 0));
+      } finally {
+        if (!cancelled) setNetDiffLoading(false);
+      }
+    };
+
+    calculateNetDifference();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activeTab, user, myAssets]);
+
+  useFocusEffect(
+    useCallback(() => {
+      fetchFavorites();
+    }, [fetchFavorites])
+  );
 
   // Grouped Stocks (Sorted by Ticker A-Z)
   const groupedStocks = useMemo(
@@ -304,8 +460,21 @@ const HomeScreen = ({ navigation }) => {
       : (txTypeFilter !== 'all' ? `${txTypeFilter === 'purchase' ? 'Buys' : 'Sells'} only` : 'Current Filters');
     saveFilterPreset({ name, congressman: selectedCongressman, txTypeFilter, sortOrder, dateFilterDays });
   }, [selectedCongressman, txTypeFilter, sortOrder, dateFilterDays, saveFilterPreset]);
+  
   const handleCloseFilter = useCallback(() => setShowFilterModal(false), []);
-  const handleRefresh = useCallback(() => fetchData(true), [fetchData]);
+  
+  const handleRefresh = useCallback(() => {
+    if (activeTab === 'home') {
+      fetchFavorites();
+      return;
+    }
+    fetchData(true);
+  }, [activeTab, fetchData, fetchFavorites]);
+
+  const handleOpenHomeTab = useCallback(() => {
+    setActiveTab('home');
+    fetchFavorites();
+  }, [fetchFavorites]);
 
   const renderItem = useCallback(({ item }) => {
     const isExpanded = expandedTicker === item.ticker;
@@ -411,6 +580,34 @@ const HomeScreen = ({ navigation }) => {
       </View>
     </View>
   ), []);
+
+  const renderFavoriteItem = useCallback(({ item }) => (
+    <TouchableOpacity
+      style={styles.homeFavoriteCard}
+      onPress={() => navigation.navigate('StockDetail', { ticker: item.ticker })}
+      activeOpacity={0.75}
+    >
+      <View style={styles.homeFavoriteMeta}>
+        <Text style={styles.homeFavoriteTicker}>{item.ticker}</Text>
+        <Text style={styles.homeFavoriteDate}>
+          Saved {formatFavoriteDate(item.buyDate)} · Qty {getAssetQuantity(item)}
+        </Text>
+      </View>
+      <Icon name="chevron-right" size={20} color="#007AFF" />
+    </TouchableOpacity>
+  ), [navigation]);
+
+  const netDifferenceFormatted = useMemo(() => {
+    const currency = new Intl.NumberFormat('en-US', {
+      style: 'currency',
+      currency: 'USD',
+      maximumFractionDigits: 2,
+    }).format(Math.abs(netDifference || 0));
+
+    if ((netDifference || 0) > 0) return `+${currency}`;
+    if ((netDifference || 0) < 0) return `-${currency}`;
+    return currency;
+  }, [netDifference]);
 
   if (loading) {
     return (
@@ -534,131 +731,198 @@ const HomeScreen = ({ navigation }) => {
         />
       )}
 
-          {/* ENHANCED FILTER MODAL */}
-          <Modal
-            visible={showFilterModal}
-            transparent
-            animationType="slide"
-            onRequestClose={handleCloseFilter}
-          >
-            <View style={styles.modalBackground}>
-              <View style={styles.modalContainer}>
-                <View style={styles.modalHeader}>
-                  <Text style={styles.modalTitle}>Filters</Text>
-                  <TouchableOpacity onPress={handleCloseFilter}>
-                    <Icon name="close" size={24} color="#000" />
-                  </TouchableOpacity>
+      {/* HOME TAB */}
+      {activeTab === 'home' && (
+        <FlatList
+          data={myAssets}
+          keyExtractor={(item, index) => item.id || `${item.ticker}-${index}`}
+          renderItem={renderFavoriteItem}
+          onRefresh={handleRefresh}
+          refreshing={favoritesLoading}
+          contentContainerStyle={styles.homeListContent}
+          ListHeaderComponent={(
+            <View style={styles.homeHeroCard}>
+              <View style={styles.homeHeroTopRow}>
+                <View>
+                  <Text style={styles.homeHeroTitle}>Favorited Stocks</Text>
                 </View>
-
-                {/* Tab row */}
-                <View style={styles.modalTabRow}>
-                  {['member', 'options'].map((tab) => (
-                    <TouchableOpacity
-                      key={tab}
-                      style={[styles.modalTab, filterModalTab === tab && styles.modalTabActive]}
-                      onPress={() => setFilterModalTab(tab)}
-                    >
-                      <Text style={[styles.modalTabText, filterModalTab === tab && styles.modalTabTextActive]}>
-                        {tab === 'member' ? 'Member' : 'Sort & Filter'}
-                      </Text>
-                    </TouchableOpacity>
-                  ))}
-                </View>
-
-                {filterModalTab === 'member' ? (
-                  <FlatList
-                    data={congressmenList}
-                    keyExtractor={(item, idx) => idx.toString()}
-                    renderItem={({ item }) => (
-                      <TouchableOpacity
-                        style={[
-                          styles.filterOption,
-                          selectedCongressman === item && styles.filterOptionSelected,
-                        ]}
-                        onPress={() => handleSelectCongressman(item)}
-                      >
-                        <Text style={[
-                          styles.filterOptionText,
-                          selectedCongressman === item && styles.filterOptionTextSelected,
-                        ]}>
-                          {item}
-                        </Text>
-                        {selectedCongressman === item && <Icon name="check" size={20} color="#007AFF" />}
-                      </TouchableOpacity>
-                    )}
-                    scrollEnabled
-                    style={{ maxHeight: '70%' }}
-                  />
-                ) : (
-                  <ScrollView style={{ maxHeight: '70%' }}>
-                    <View style={styles.optSection}>
-                      <Text style={styles.optSectionTitle}>Transaction Type</Text>
-                      <View style={styles.optRow}>
-                        {[
-                          { key: 'all', label: 'All' },
-                          { key: 'purchase', label: '▲ Purchases' },
-                          { key: 'sale', label: '▼ Sales' },
-                        ].map((opt) => (
-                          <TouchableOpacity
-                            key={opt.key}
-                            style={[styles.optChip, txTypeFilter === opt.key && styles.optChipActive]}
-                            onPress={() => setTxTypeFilter(opt.key)}
-                          >
-                            <Text style={[styles.optChipText, txTypeFilter === opt.key && styles.optChipTextActive]}>
-                              {opt.label}
-                            </Text>
-                          </TouchableOpacity>
-                        ))}
-                      </View>
-                    </View>
-
-                    <View style={styles.optSection}>
-                      <Text style={styles.optSectionTitle}>Sort By</Text>
-                      <View style={styles.optRow}>
-                        {[
-                          { key: 'signal', label: '⚡ Signal Score' },
-                          { key: 'trades', label: '📊 Most Trades' },
-                          { key: 'recent', label: '🕐 Most Recent' },
-                        ].map((opt) => (
-                          <TouchableOpacity
-                            key={opt.key}
-                            style={[styles.optChip, sortOrder === opt.key && styles.optChipActive]}
-                            onPress={() => setSortOrder(opt.key)}
-                          >
-                            <Text style={[styles.optChipText, sortOrder === opt.key && styles.optChipTextActive]}>
-                              {opt.label}
-                            </Text>
-                          </TouchableOpacity>
-                        ))}
-                      </View>
-                    </View>
-
-                    {filterPresets && filterPresets.length > 0 && (
-                      <View style={styles.optSection}>
-                        <Text style={styles.optSectionTitle}>Saved Presets</Text>
-                        {filterPresets.map((preset, idx) => (
-                          <View key={idx} style={styles.presetRow}>
-                            <TouchableOpacity style={styles.presetApplyBtn} onPress={() => handleApplyPreset(preset)}>
-                              <Icon name="bookmark-outline" size={16} color="#007AFF" />
-                              <Text style={styles.presetName}>{preset.name}</Text>
-                            </TouchableOpacity>
-                            <TouchableOpacity onPress={() => removeFilterPreset(idx)}>
-                              <Icon name="close-circle" size={20} color="#C62828" />
-                            </TouchableOpacity>
-                          </View>
-                        ))}
-                      </View>
-                    )}
-
-                    <TouchableOpacity style={styles.savePresetBtn} onPress={handleSavePreset}>
-                      <Icon name="content-save-outline" size={18} color="#007AFF" />
-                      <Text style={styles.savePresetBtnText}> Save Current Filters as Preset</Text>
-                    </TouchableOpacity>
-                  </ScrollView>
-                )}
+                <TouchableOpacity onPress={() => navigation.navigate(user ? 'MyAssetsScreen' : 'ProfileScreen')}>
+                  <View style={styles.homeCountBadge}>
+                    <Text style={styles.homeCountBadgeText}>{myAssets.length}</Text>
+                  </View>
+               </TouchableOpacity> 
+              </View>
+              <Text style={styles.homeHeroSubtitle}>
+                {user
+                  ? `See your current net gainings/losses based on your favorited stocks.`
+                  : 'Log in to sync and view your current favorites.'}
+              </Text>
+              <View style={styles.homeNetBlock}>
+                <Text style={styles.homeNetLabel}>Net Difference</Text>
+                <Text
+                  style={[
+                    styles.homeNetValue,
+                    netDifference > 0
+                      ? styles.homeNetPositive
+                      : netDifference < 0
+                        ? styles.homeNetNegative
+                        : styles.homeNetNeutral,
+                  ]}
+                >
+                  {netDiffLoading ? 'Calculating...' : netDifferenceFormatted}
+                </Text>
               </View>
             </View>
-          </Modal>
+          )}
+          ListEmptyComponent={
+            favoritesLoading ? null : favoritesError ? (
+              <Text style={styles.emptyText}>{favoritesError}</Text>
+            ) : user ? (
+              <View style={styles.homeEmptyState}>
+                <Icon name="star-outline" size={34} color="#8E8E93" />
+                <Text style={styles.homeEmptyTitle}>No favorited stocks yet</Text>
+                <Text style={styles.homeEmptySubtitle}>
+                  Add a stock to your watchlist to see it here.
+                </Text>
+              </View>
+            ) : (
+              <View style={styles.homeEmptyState}>
+                <Icon name="account-circle-outline" size={34} color="#8E8E93" />
+                <Text style={styles.homeEmptyTitle}>Sign in to view favorites</Text>
+                <Text style={styles.homeEmptySubtitle}>
+                  Your saved tickers will appear on this Home tab.
+                </Text>
+              </View>
+            )
+          }
+        />
+      )}
+
+      {/* ENHANCED FILTER MODAL */}
+      <Modal
+        visible={showFilterModal}
+        transparent
+        animationType="slide"
+        onRequestClose={handleCloseFilter}
+      >
+        <View style={styles.modalBackground}>
+          <View style={styles.modalContainer}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Filters</Text>
+              <TouchableOpacity onPress={handleCloseFilter}>
+                <Icon name="close" size={24} color="#000" />
+              </TouchableOpacity>
+            </View>
+
+            {/* Tab row */}
+            <View style={styles.modalTabRow}>
+              {['member', 'options'].map((tab) => (
+                <TouchableOpacity
+                  key={tab}
+                  style={[styles.modalTab, filterModalTab === tab && styles.modalTabActive]}
+                  onPress={() => setFilterModalTab(tab)}
+                >
+                  <Text style={[styles.modalTabText, filterModalTab === tab && styles.modalTabTextActive]}>
+                    {tab === 'member' ? 'Member' : 'Sort & Filter'}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+
+            {filterModalTab === 'member' ? (
+              <FlatList
+                data={congressmenList}
+                keyExtractor={(item, idx) => idx.toString()}
+                renderItem={({ item }) => (
+                  <TouchableOpacity
+                    style={[
+                      styles.filterOption,
+                      selectedCongressman === item && styles.filterOptionSelected,
+                    ]}
+                    onPress={() => handleSelectCongressman(item)}
+                  >
+                    <Text style={[
+                      styles.filterOptionText,
+                      selectedCongressman === item && styles.filterOptionTextSelected,
+                    ]}>
+                      {item}
+                    </Text>
+                    {selectedCongressman === item && <Icon name="check" size={20} color="#007AFF" />}
+                  </TouchableOpacity>
+                )}
+                scrollEnabled
+                style={{ maxHeight: '70%' }}
+              />
+            ) : (
+              <ScrollView style={{ maxHeight: '70%' }}>
+                <View style={styles.optSection}>
+                  <Text style={styles.optSectionTitle}>Transaction Type</Text>
+                  <View style={styles.optRow}>
+                    {[
+                      { key: 'all', label: 'All' },
+                      { key: 'purchase', label: '▲ Purchases' },
+                      { key: 'sale', label: '▼ Sales' },
+                    ].map((opt) => (
+                      <TouchableOpacity
+                        key={opt.key}
+                        style={[styles.optChip, txTypeFilter === opt.key && styles.optChipActive]}
+                        onPress={() => setTxTypeFilter(opt.key)}
+                      >
+                        <Text style={[styles.optChipText, txTypeFilter === opt.key && styles.optChipTextActive]}>
+                          {opt.label}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                </View>
+
+                <View style={styles.optSection}>
+                  <Text style={styles.optSectionTitle}>Sort By</Text>
+                  <View style={styles.optRow}>
+                    {[
+                      { key: 'signal', label: '⚡ Signal Score' },
+                      { key: 'trades', label: '📊 Most Trades' },
+                      { key: 'recent', label: '🕐 Most Recent' },
+                    ].map((opt) => (
+                      <TouchableOpacity
+                        key={opt.key}
+                        style={[styles.optChip, sortOrder === opt.key && styles.optChipActive]}
+                        onPress={() => setSortOrder(opt.key)}
+                      >
+                        <Text style={[styles.optChipText, sortOrder === opt.key && styles.optChipTextActive]}>
+                          {opt.label}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                </View>
+
+                {filterPresets && filterPresets.length > 0 && (
+                  <View style={styles.optSection}>
+                    <Text style={styles.optSectionTitle}>Saved Presets</Text>
+                    {filterPresets.map((preset, idx) => (
+                      <View key={idx} style={styles.presetRow}>
+                        <TouchableOpacity style={styles.presetApplyBtn} onPress={() => handleApplyPreset(preset)}>
+                          <Icon name="bookmark-outline" size={16} color="#007AFF" />
+                          <Text style={styles.presetName}>{preset.name}</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity onPress={() => removeFilterPreset(idx)}>
+                          <Icon name="close-circle" size={20} color="#C62828" />
+                        </TouchableOpacity>
+                      </View>
+                    ))}
+                  </View>
+                )}
+
+                <TouchableOpacity style={styles.savePresetBtn} onPress={handleSavePreset}>
+                  <Icon name="content-save-outline" size={18} color="#007AFF" />
+                  <Text style={styles.savePresetBtnText}> Save Current Filters as Preset</Text>
+                </TouchableOpacity>
+              </ScrollView>
+            )}
+          </View>
+        </View>
+      </Modal>
 
       <View style={styles.bottomNav}>
         <TouchableOpacity
@@ -672,6 +936,19 @@ const HomeScreen = ({ navigation }) => {
           />
           <Text style={[styles.navButtonText, activeTab === 'transactions' && styles.navButtonTextActive]}>
             Transactions
+          </Text>
+        </TouchableOpacity>
+                <TouchableOpacity
+          style={[styles.navButton, activeTab === 'home' && styles.navButtonActive]}
+                  onPress={handleOpenHomeTab}
+        >
+          <Icon
+            name="home"
+            size={24}
+            color={activeTab === 'home' ? '#007AFF' : '#8E8E93'}
+          />
+          <Text style={[styles.navButtonText, activeTab === 'home' && styles.navButtonTextActive]}>
+            Home
           </Text>
         </TouchableOpacity>
         <TouchableOpacity
@@ -923,6 +1200,142 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#1C1C1E',
   },
+  tickerCardTablet: {
+    flex: 1,
+    marginHorizontal: 8,
+  },
+  homeListContent: {
+    paddingHorizontal: 14,
+    paddingTop: 12,
+    paddingBottom: 80,
+    flexGrow: 1,
+  },
+  homeHeroCard: {
+    backgroundColor: '#fff',
+    borderRadius: 16,
+    padding: 18,
+    marginBottom: 14,
+    shadowColor: '#000',
+    shadowOpacity: 0.08,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 2,
+  },
+  homeHeroTopRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+  },
+  homeHeroTitle: {
+    fontSize: 24,
+    fontWeight: '800',
+    color: '#1C1C1E',
+    marginTop: 4,
+  },
+  homeHeroSubtitle: {
+    fontSize: 14,
+    lineHeight: 20,
+    color: '#6B7280',
+    marginTop: 10,
+  },
+  homeHeroButtonText: {
+    color: '#007AFF',
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  homeNetBlock: {
+    marginTop: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 10,
+    backgroundColor: '#F8FAFC',
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+  },
+  homeNetLabel: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#6B7280',
+    textTransform: 'uppercase',
+    letterSpacing: 0.4,
+  },
+  homeNetValue: {
+    marginTop: 4,
+    fontSize: 24,
+    fontWeight: '800',
+  },
+  homeNetPositive: {
+    color: '#0F9D58',
+  },
+  homeNetNegative: {
+    color: '#C62828',
+  },
+  homeNetNeutral: {
+    color: '#1C1C1E',
+  },
+  homeCountBadge: {
+    minWidth: 30,
+    height: 30,
+    borderRadius: 21,
+    backgroundColor: '#007AFF',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  homeCountBadgeText: {
+    color: '#ffffff',
+    fontSize: 16,
+    fontWeight: '800',
+  },
+  homeFavoriteCard: {
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    marginBottom: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    shadowColor: '#000',
+    shadowOpacity: 0.06,
+    shadowRadius: 5,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 2,
+  },
+  homeFavoriteMeta: {
+    flex: 1,
+    paddingRight: 12,
+  },
+  homeFavoriteTicker: {
+    fontSize: 17,
+    fontWeight: '800',
+    color: '#1C1C1E',
+  },
+  homeFavoriteDate: {
+    fontSize: 13,
+    color: '#8E8E93',
+    marginTop: 4,
+  },
+  homeEmptyState: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 24,
+    paddingBottom: 80,
+  },
+  homeEmptyTitle: {
+    marginTop: 12,
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#1C1C1E',
+    textAlign: 'center',
+  },
+  homeEmptySubtitle: {
+    marginTop: 8,
+    fontSize: 14,
+    lineHeight: 20,
+    color: '#8E8E93',
+    textAlign: 'center',
+  },
   bottomNav: {
     flexDirection: 'row',
     backgroundColor: '#fff',
@@ -951,31 +1364,102 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   navButtonTextActive: {
-      tickerCardTablet: { flex: 1, marginHorizontal: 8 },
-      modalTabRow: {
-        flexDirection: 'row',
-        paddingHorizontal: 16,
-        paddingVertical: 8,
-        borderBottomWidth: 1,
-        borderBottomColor: '#E1E4E8',
-        gap: 8,
-      },
-      modalTab: { flex: 1, paddingVertical: 8, alignItems: 'center', borderRadius: 8 },
-      modalTabActive: { backgroundColor: '#EFF6FF' },
-      modalTabText: { fontSize: 14, fontWeight: '600', color: '#6B7280' },
-      modalTabTextActive: { color: '#007AFF' },
-      optSection: { paddingHorizontal: 16, paddingTop: 16 },
-      optSectionTitle: { fontSize: 12, fontWeight: '700', color: '#6B7280', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 10 },
-      optRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-      optChip: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20, backgroundColor: '#F3F4F6', borderWidth: 1, borderColor: '#E5E7EB' },
-      optChipActive: { backgroundColor: '#007AFF', borderColor: '#007AFF' },
-      optChipText: { fontSize: 13, fontWeight: '600', color: '#374151' },
-      optChipTextActive: { color: '#fff' },
-      presetRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 10, borderBottomWidth: 0.5, borderBottomColor: '#E5E7EB' },
-      presetApplyBtn: { flex: 1, flexDirection: 'row', alignItems: 'center' },
-      presetName: { fontSize: 14, fontWeight: '600', color: '#374151', marginLeft: 8 },
-      savePresetBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', margin: 16, padding: 14, backgroundColor: '#EFF6FF', borderRadius: 12, borderWidth: 1, borderColor: '#BFDBFE' },
-      savePresetBtnText: { fontSize: 14, fontWeight: '700', color: '#007AFF' },
+    color: '#007AFF',
+  },
+  modalTabRow: {
+    flexDirection: 'row',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E1E4E8',
+    gap: 8,
+  },
+  modalTab: {
+    flex: 1,
+    paddingVertical: 8,
+    alignItems: 'center',
+    borderRadius: 8,
+  },
+  modalTabActive: {
+    backgroundColor: '#EFF6FF',
+  },
+  modalTabText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#6B7280',
+  },
+  modalTabTextActive: {
+    color: '#007AFF',
+  },
+  optSection: {
+    paddingHorizontal: 16,
+    paddingTop: 16,
+  },
+  optSectionTitle: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#6B7280',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    marginBottom: 10,
+  },
+  optRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  optChip: {
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 20,
+    backgroundColor: '#F3F4F6',
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+  },
+  optChipActive: {
+    backgroundColor: '#007AFF',
+    borderColor: '#007AFF',
+  },
+  optChipText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#374151',
+  },
+  optChipTextActive: {
+    color: '#fff',
+  },
+  presetRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 10,
+    borderBottomWidth: 0.5,
+    borderBottomColor: '#E5E7EB',
+  },
+  presetApplyBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  presetName: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#374151',
+    marginLeft: 8,
+  },
+  savePresetBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    margin: 16,
+    padding: 14,
+    backgroundColor: '#EFF6FF',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#BFDBFE',
+  },
+  savePresetBtnText: {
+    fontSize: 14,
+    fontWeight: '700',
     color: '#007AFF',
   },
   scoreBadge: {
