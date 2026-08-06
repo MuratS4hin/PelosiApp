@@ -251,7 +251,7 @@ const HomeScreen = ({ navigation }) => {
   const [loading, setLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [showFilterModal, setShowFilterModal] = useState(false);
-  const [activeTab, setActiveTab] = useState('transactions'); // 'transactions' or 'tickers'
+  const [activeTab, setActiveTab] = useState('home'); // 'transactions' or 'tickers'
   const [dateFilterDays, setDateFilterDays] = useState(null); // null = all dates, or number of days
   const [tickerSearch, setTickerSearch] = useState('');
   const [error, setError] = useState(null);
