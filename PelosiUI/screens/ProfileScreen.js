@@ -88,7 +88,6 @@ export default function ProfileScreen({ navigation, route, activeTabInfo='favori
         const res = await ApiService.listFavorites();
         const favs = Array.isArray(res) ? res : [];
         setFavorites(favs);
-        console.log('Loaded favorites:', favs);
         setMyAssets(
           favs.map((f) => ({
             ticker: (f.ticker || '').toUpperCase(),
