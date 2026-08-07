@@ -88,11 +88,16 @@ export default function ProfileScreen({ navigation, route, activeTabInfo='favori
         const res = await ApiService.listFavorites();
         const favs = Array.isArray(res) ? res : [];
         setFavorites(favs);
+        console.log('Loaded favorites:', favs);
         setMyAssets(
           favs.map((f) => ({
-            ticker: f.ticker,
-            addedDate: f.created_at,
-            id: `${f.ticker}-${f.created_at || Date.now()}`,
+            ticker: (f.ticker || '').toUpperCase(),
+            addedDate: f.addedDate,
+            buyDate: f.buyDate ?? f.addedDate,
+            buyPrice: f.buyPrice ?? null,
+            buyAmount: f.buyAmount ?? null,
+            buyQuantity: f.buyQuantity ?? 1,
+            id: `${f.ticker}-${f.addedDate ?? Date.now()}`,
           }))
         );
       } catch (e) {
@@ -146,9 +151,9 @@ export default function ProfileScreen({ navigation, route, activeTabInfo='favori
                   onPress={() => navigation.navigate('StockDetail', { ticker: item.ticker })}
                 >
                   <View style={styles.favLeft}>
-                    <Text style={styles.favTicker}>{item.ticker}</Text>
+                    <Text style={styles.favTicker}>{(item.ticker || '').toUpperCase()}</Text>
                     <Text style={styles.favDate}>
-                      {formatFavoriteDate(item.created_at)}
+                      {formatFavoriteDate(item.added_date ?? item.created_at)}
                     </Text>
                   </View>
                   <Text style={styles.favChevron}>›</Text>

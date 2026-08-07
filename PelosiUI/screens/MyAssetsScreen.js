@@ -42,15 +42,16 @@ const MyAssetsScreen = () => {
       const mapped = (favorites || []).map((favorite) => {
         const ticker = (favorite.ticker || '').toUpperCase();
         const existing = existingByTicker.get(ticker);
+        const addedDate = favorite.added_date ?? favorite.created_at;
 
         return {
           ticker,
-          addedDate: favorite.created_at,
-          buyDate: existing?.buyDate || favorite.created_at,
-          buyPrice: existing?.buyPrice ?? null,
-          buyAmount: existing?.buyAmount ?? null,
-          buyQuantity: existing?.buyQuantity ?? 1,
-          id: `${ticker}-${favorite.created_at || Date.now()}`,
+          addedDate,
+          buyDate: existing?.buyDate ?? favorite.buy_date ?? addedDate,
+          buyPrice: existing?.buyPrice ?? favorite.buy_price ?? null,
+          buyAmount: existing?.buyAmount ?? favorite.buy_amount ?? null,
+          buyQuantity: existing?.buyQuantity ?? favorite.buy_quantity ?? 1,
+          id: `${ticker}-${favorite.added_date || favorite.created_at || Date.now()}`,
         };
       });
 

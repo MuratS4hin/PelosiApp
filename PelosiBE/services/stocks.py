@@ -16,14 +16,12 @@ def _safe_company_name(stock, ticker: str):
         pass
     return ticker.upper()
 
-
 def _build_chart(history):
     return [
         {"date": idx.strftime("%Y-%m-%d"), "close": round(float(row["Close"]), 2)}
         for idx, row in history.iterrows()
         if row.get("Close") is not None
     ]
-
 
 def _compute_change(chart):
     if len(chart) >= 2:
@@ -32,7 +30,6 @@ def _compute_change(chart):
         percent = round((change / first) * 100, 2) if first else 0
         return change, percent
     return 0.0, 0.0
-
 
 def _fetch_finnhub_quote(ticker: str):
     try:
@@ -205,7 +202,6 @@ def fetch_all_ticker_data(start: str = None, end: str = None, output_path="data/
     except Exception as e:
         return {"error": str(e)}
 
-
 def get_recommendation_trends(ticker: str):
     try:
         api_key = os.getenv("FINNHUB_API_KEY")
@@ -226,7 +222,6 @@ def get_recommendation_trends(ticker: str):
     except Exception as e:
         return {"error": str(e)}
 
-
 def get_company_news(ticker: str, start: str, end: str):
     try:
         api_key = os.getenv("FINNHUB_API_KEY")
@@ -243,6 +238,14 @@ def get_company_news(ticker: str, start: str, end: str):
             return {"error": f"Finnhub request failed: {resp.status_code}", "detail": resp.text}
 
         return resp.json()
+
+    except Exception as e:
+        return {"error": str(e)}
+
+def get_current_stock_value(ticker: str):
+    try:
+        tickerInfo = _fetch_finnhub_quote(ticker)
+        return tickerInfo.get("current")
 
     except Exception as e:
         return {"error": str(e)}

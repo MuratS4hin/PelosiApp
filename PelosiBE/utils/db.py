@@ -91,9 +91,25 @@ def init_db():
         id SERIAL PRIMARY KEY,
         user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
         ticker VARCHAR(20) NOT NULL,
+        buy_price NUMERIC,
+        buy_date TEXT,
+        buy_amount NUMERIC,
+        buy_quantity NUMERIC,
+        added_date TIMESTAMP,
+        client_id TEXT,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         UNIQUE(user_id, ticker)
     );
+    """)
+
+    cur.execute("""
+    ALTER TABLE favorite_stocks
+    ADD COLUMN IF NOT EXISTS buy_price NUMERIC,
+    ADD COLUMN IF NOT EXISTS buy_date TEXT,
+    ADD COLUMN IF NOT EXISTS buy_amount NUMERIC,
+    ADD COLUMN IF NOT EXISTS buy_quantity NUMERIC,
+    ADD COLUMN IF NOT EXISTS added_date TIMESTAMP,
+    ADD COLUMN IF NOT EXISTS client_id TEXT;
     """)
 
     # Add password reset columns to users table if they don't exist

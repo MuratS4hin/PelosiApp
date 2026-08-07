@@ -157,24 +157,78 @@ def get_user_by_id(user_id: int):
         release_db_connection(conn)
 
 
-def add_favorite_stock(user_id: int, ticker: str):
+def _parse_iso_datetime(value):
+    if not value:
+        return datetime.now()
+    if isinstance(value, datetime):
+        return value
+    try:
+        return datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except Exception:
+        return datetime.now()
+
+
+def add_favorite_stock(
+    user_id: int,
+    ticker: str,
+    buy_price=None,
+    buy_date=None,
+    buy_amount=None,
+    buy_quantity=None,
+    added_date=None,
+    client_id=None,
+):
     conn = get_db_connection()
     try:
         with conn.cursor() as cur:
             cur.execute(
                 """
-                INSERT INTO favorite_stocks (user_id, ticker)
-                VALUES (%s, %s)
-                ON CONFLICT (user_id, ticker) DO NOTHING
-                RETURNING id, user_id, ticker, created_at;
+                INSERT INTO favorite_stocks (
+                    user_id,
+                    ticker,
+                    buy_price,
+                    buy_date,
+                    buy_amount,
+                    buy_quantity,
+                    added_date,
+                    client_id
+                )
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                ON CONFLICT (user_id, ticker) DO UPDATE SET
+                    buy_price = EXCLUDED.buy_price,
+                    buy_date = EXCLUDED.buy_date,
+                    buy_amount = EXCLUDED.buy_amount,
+                    buy_quantity = EXCLUDED.buy_quantity,
+                    added_date = EXCLUDED.added_date,
+                    client_id = EXCLUDED.client_id
+                RETURNING id, user_id, ticker, buy_price, buy_date, buy_amount, buy_quantity, added_date, client_id;
                 """,
-                (user_id, ticker.upper()),
+                (
+                    user_id,
+                    ticker.upper(),
+                    buy_price,
+                    buy_date,
+                    buy_amount,
+                    buy_quantity,
+                    _parse_iso_datetime(added_date),
+                    client_id,
+                ),
             )
             row = cur.fetchone()
             conn.commit()
             if not row:
                 return None
-            return {"id": row[0], "user_id": row[1], "ticker": row[2], "created_at": row[3]}
+            return {
+                "dbId": row[0],
+                "userId": row[1],
+                "ticker": row[2],
+                "buyPrice": row[3],
+                "buyDate": row[4],
+                "buyAmount": row[5],
+                "buyQuantity": row[6],
+                "addedDate": row[7],
+                "id": row[8],
+            }
     finally:
         release_db_connection(conn)
 
@@ -185,15 +239,27 @@ def list_favorite_stocks(user_id: int):
         with conn.cursor() as cur:
             cur.execute(
                 """
-                SELECT ticker, created_at
+                SELECT id, ticker, buy_price, buy_date, buy_amount, buy_quantity, added_date, client_id
                 FROM favorite_stocks
                 WHERE user_id = %s
-                ORDER BY created_at DESC;
+                ORDER BY added_date DESC, id DESC;
                 """,
                 (user_id,),
             )
             rows = cur.fetchall()
-            return [{"ticker": r[0], "created_at": r[1]} for r in rows]
+            return [
+                {
+                    "dbId": r[0],
+                    "ticker": r[1],
+                    "buyPrice": r[2],
+                    "buyDate": r[3],
+                    "buyAmount": r[4],
+                    "buyQuantity": r[5],
+                    "addedDate": r[6],
+                    "id": r[7],
+                }
+                for r in rows
+            ]
     finally:
         release_db_connection(conn)
 

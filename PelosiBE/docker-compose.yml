@@ -1,0 +1,39 @@
+services:
+  pelosibe:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: local/pelosibe:latest
+    container_name: pelosibe
+
+    ports:
+      - "8000:8000"
+
+    environment:
+      API_PASSWORD: ${API_PASSWORD}
+      APP_FRONTEND_URL: ${APP_FRONTEND_URL}
+
+      DB_HOST: ${DB_HOST}
+      DB_NAME: ${DB_NAME}
+      DB_PASSWORD: ${DB_PASSWORD}
+      DB_PORT: ${DB_PORT}
+      DB_SSLMODE: ${DB_SSLMODE}
+      DB_USER: ${DB_USER}
+
+      FINNHUB_API_KEY: ${FINNHUB_API_KEY}
+
+      GMAIL_AUTH_EMAIL: ${GMAIL_AUTH_EMAIL}
+      SENDER_PASSWORD: ${SENDER_PASSWORD}
+      SMTP_PORT: ${SMTP_PORT}
+      SMTP_SERVER: ${SMTP_SERVER}
+
+    networks:
+      - bridge
+
+    restart: unless-stopped
+
+    mem_limit: 4g
+
+networks:
+  bridge:
+    driver: bridge

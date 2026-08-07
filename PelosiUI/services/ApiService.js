@@ -231,8 +231,8 @@ export default class ApiService {
     return this.request('favorites', 'GET');
   }
 
-  static async addFavorite(ticker) {
-    return this.request('favorites', 'POST', { ticker });
+  static async addFavorite(body) {
+    return this.request('favorites', 'POST', body);
   }
 
   static async removeFavorite(ticker) {

@@ -193,20 +193,36 @@ const AddAssetScreen = ({ navigation, route }) => {
     }
 
     try {
-      await ApiService.addFavorite(ticker);
+      const normalizedTicker = ticker.toUpperCase();
+      const nowIso = new Date().toISOString();
+      const clientId = `${normalizedTicker}-${Date.now()}`;
+
+      const apiBody = {
+        ticker: normalizedTicker,
+        buyPrice: parsedPrice,
+        buyDate,
+        buyAmount: parsedAmount,
+        buyQuantity: parsedQuantity,
+        addedDate: nowIso,
+        id: clientId,
+      };
+
+      const localAsset = {
+        ticker: normalizedTicker,
+        buyPrice: parsedPrice,
+        buyDate,
+        buyAmount: parsedAmount,
+        buyQuantity: parsedQuantity,
+        addedDate: nowIso,
+        id: clientId,
+      };
+
+      await ApiService.addFavorite(apiBody);
+      addAsset(localAsset);
+    
     } catch (e) {
       console.warn('Could not save favorite:', e.message || e);
     }
-
-    addAsset({
-      ticker: ticker.toUpperCase(),
-      buyPrice: parsedPrice,
-      buyDate,
-      buyAmount: parsedAmount,
-      buyQuantity: parsedQuantity,
-      addedDate: new Date().toISOString(),
-      id: `${ticker}-${Date.now()}`,
-    });
 
     navigation.goBack();
   };

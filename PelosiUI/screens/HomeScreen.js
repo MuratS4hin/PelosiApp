@@ -233,15 +233,29 @@ const getAssetQuantity = (asset) => {
   return quantity && quantity > 0 ? quantity : 1;
 };
 
-const mergeFavoriteWithAsset = (favorite, currentAsset) => ({
-  ticker: favorite.ticker,
-  addedDate: favorite.created_at,
-  id: `${favorite.ticker}-${favorite.created_at || 'favorite'}`,
-  buyPrice: currentAsset?.buyPrice ?? null,
-  buyAmount: currentAsset?.buyAmount ?? null,
-  buyQuantity: currentAsset?.buyQuantity ?? 1,
-  buyDate: currentAsset?.buyDate ?? null,
-});
+const mergeFavoriteWithAsset = (favorite, currentAsset) => {
+  const addedDate = favorite.added_date ?? favorite.created_at;
+
+  console.log({
+    ticker: (favorite.ticker || '').toUpperCase(),
+    addedDate,
+    id: `${favorite.ticker}-${favorite.added_date || favorite.created_at || 'favorite'}`,
+    buyPrice: currentAsset?.buyPrice ?? favorite.buy_price ?? null,
+    buyAmount: currentAsset?.buyAmount ?? favorite.buy_amount ?? null,
+    buyQuantity: currentAsset?.buyQuantity ?? favorite.buy_quantity ?? 1,
+    buyDate: currentAsset?.buyDate ?? favorite.buy_date ?? addedDate ?? null,
+  });
+
+  return {
+    ticker: (favorite.ticker || '').toUpperCase(),
+    addedDate,
+    id: `${favorite.ticker}-${favorite.added_date || favorite.created_at || 'favorite'}`,
+    buyPrice: currentAsset?.buyPrice ?? favorite.buy_price ?? null,
+    buyAmount: currentAsset?.buyAmount ?? favorite.buy_amount ?? null,
+    buyQuantity: currentAsset?.buyQuantity ?? favorite.buy_quantity ?? 1,
+    buyDate: currentAsset?.buyDate ?? favorite.buy_date ?? addedDate ?? null,
+  };
+};
 
 const HomeScreen = ({ navigation }) => {
   const [rawData, setRawData] = useState([]); 

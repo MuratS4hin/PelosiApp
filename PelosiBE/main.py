@@ -17,7 +17,7 @@ from utils.db_io import (
     verify_reset_token,
     reset_password,
 )
-from services.stocks import get_stock_info, fetch_all_ticker_data, get_recommendation_trends, get_company_news  # Added fetch_all_ticker_data
+from services.stocks import get_stock_info, get_current_stock_value, get_recommendation_trends, get_company_news  # Added fetch_all_ticker_data
 from utils.db import init_db
 from utils.security import check_api_security, create_access_token, get_current_user_id
 from typing import Optional
@@ -38,6 +38,12 @@ class AuthPayload(BaseModel):
 
 class FavoritePayload(BaseModel):
     ticker: str
+    buyPrice: Optional[float] = None
+    buyDate: Optional[str] = None
+    buyAmount: Optional[float] = None
+    buyQuantity: Optional[float] = None
+    addedDate: Optional[str] = None
+    id: Optional[str] = None
 
 
 class PasswordResetRequestPayload(BaseModel):
@@ -66,10 +72,10 @@ def stock_data(ticker: str, start: str, end: str, password: Optional[str] = Quer
     check_api_security(password)
     return get_stock_info(ticker, start, end)
 
-@app.get("/stocks/fetch-all")
-def fetch_all_stocks(start: str, end: str, password: Optional[str] = Query(None)):
+@app.get("/stocks/get_current_stock_value/{ticker}")
+def fetch_all_stocks(ticker: str, password: Optional[str] = Query(None)):
     check_api_security(password)
-    return fetch_all_ticker_data(start, end)
+    return get_current_stock_value(ticker)
 
 @app.get("/stocks/recommendation-trends/{ticker}")
 def recommendation_trends(ticker: str, password: Optional[str] = Query(None)):
@@ -143,7 +149,16 @@ def get_favorites(user_id: int = Depends(get_current_user_id)):
 
 @app.post("/favorites")
 def add_favorite(payload: FavoritePayload, user_id: int = Depends(get_current_user_id)):
-    created = add_favorite_stock(user_id, payload.ticker)
+    created = add_favorite_stock(
+        user_id=user_id,
+        ticker=payload.ticker,
+        buy_price=payload.buyPrice,
+        buy_date=payload.buyDate,
+        buy_amount=payload.buyAmount,
+        buy_quantity=payload.buyQuantity,
+        added_date=payload.addedDate,
+        client_id=payload.id,
+    )
     if not created:
         return {"message": "Already in favorites"}
     return created
